@@ -15,14 +15,16 @@ from quran_analysis.config import settings
 from quran_analysis.db.session import get_session_local
 from quran_analysis.ingestion.memory import ingest_memory, ingest_source_release, validate_source_release
 from quran_analysis.models.tables import NormalizedToken, OrthographicToken, SourceRelease, TextUnit, UnicodeCodepoint
+from quran_analysis.morphology.core import (conflicts as morph_conflicts, export_entity as morph_export_entity, get_table_row as morph_get_table_row, ingest_morphology, inspect_annotation_source, list_annotation_sources, register_annotation_source, show_annotation_source, show_token as morph_show_token, stats as morph_stats, unresolved as morph_unresolved, validate_annotation_source, validate_ingestion, verify_export as morph_verify_export)
 from quran_analysis.normalization.profiles import PROFILES, get_profile, normalize_token
 from quran_analysis.provenance import environment
 from quran_analysis.scopes.core import numbered_only, scope_hash
 from quran_analysis.sources.register import inspect_source, register_source
 
 app = typer.Typer(no_args_is_help=True)
-db_app = typer.Typer(); source_app = typer.Typer(); unicode_app = typer.Typer(); ayah_app = typer.Typer(); token_app = typer.Typer(); norm_app = typer.Typer(); scope_app = typer.Typer(); count_app = typer.Typer(); search_app = typer.Typer(); analysis_app = typer.Typer(); environment_app = typer.Typer(); export_app = typer.Typer(); ngrams_app = typer.Typer()
-for sub, name in [(db_app,"db"),(source_app,"source"),(unicode_app,"unicode"),(ayah_app,"ayah"),(token_app,"token"),(norm_app,"normalization"),(scope_app,"scope"),(count_app,"count"),(search_app,"search"),(analysis_app,"analysis"),(environment_app,"environment"),(export_app,"export"),(ngrams_app,"ngrams")]: app.add_typer(sub, name=name)
+db_app = typer.Typer(); source_app = typer.Typer(); unicode_app = typer.Typer(); ayah_app = typer.Typer(); token_app = typer.Typer(); norm_app = typer.Typer(); scope_app = typer.Typer(); count_app = typer.Typer(); search_app = typer.Typer(); analysis_app = typer.Typer(); environment_app = typer.Typer(); export_app = typer.Typer(); ngrams_app = typer.Typer(); annotation_source_app = typer.Typer(); morphology_app = typer.Typer(); morph_alignment_app = typer.Typer()
+morphology_app.add_typer(morph_alignment_app, name="alignment")
+for sub, name in [(db_app,"db"),(source_app,"source"),(unicode_app,"unicode"),(ayah_app,"ayah"),(token_app,"token"),(norm_app,"normalization"),(scope_app,"scope"),(count_app,"count"),(search_app,"search"),(analysis_app,"analysis"),(environment_app,"environment"),(export_app,"export"),(ngrams_app,"ngrams"),(annotation_source_app,"annotation-source"),(morphology_app,"morphology")]: app.add_typer(sub, name=name)
 
 
 def echo(obj): typer.echo(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
@@ -168,6 +170,80 @@ def analysis_verify_export(path: Path):
 @analysis_app.command("verify")
 def analysis_verify(run_id: int):
     with session_scope() as s: result = verify_run(s, run_id)
+    echo(result)
+    if not result.get("ok"): raise typer.Exit(1)
+
+
+@annotation_source_app.command("inspect")
+def annotation_source_inspect(path: Path, format: str = typer.Option(..., "--format")):
+    echo(inspect_annotation_source(path, format))
+
+@annotation_source_app.command("register")
+def annotation_source_register(path: Path, name: str = typer.Option(...), version: str = typer.Option(...), format: str = typer.Option(...), publisher: str = typer.Option(...), license: str = typer.Option(...), official_url: Optional[str] = typer.Option(None), license_url: Optional[str] = typer.Option(None), citation: Optional[str] = typer.Option(None)):
+    with session_scope() as s: echo(register_annotation_source(s, path, name=name, version=version, fmt=format, publisher=publisher, license=license, official_url=official_url, license_url=license_url, citation=citation))
+
+@annotation_source_app.command("list")
+def annotation_source_list():
+    with session_scope() as s: echo(list_annotation_sources(s))
+
+@annotation_source_app.command("show")
+def annotation_source_show(source_id: int):
+    with session_scope() as s: echo(show_annotation_source(s, source_id))
+
+@annotation_source_app.command("validate")
+def annotation_source_validate(source_id: int):
+    with session_scope() as s:
+        result = validate_annotation_source(s, source_id)
+    echo(result)
+    if not result.get("ok"): raise typer.Exit(1)
+
+@morphology_app.command("ingest")
+def morphology_ingest(annotation_source_id: int, quran_source: int = typer.Option(..., "--quran-source"), alignment_config: str = typer.Option(..., "--alignment-config"), allow_dirty: bool = typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: echo(ingest_morphology(s, annotation_source_id, quran_source, alignment_config, allow_dirty))
+
+@morphology_app.command("validate")
+def morphology_validate(ingestion_run_id: int):
+    with session_scope() as s:
+        result = validate_ingestion(s, ingestion_run_id)
+    echo(result)
+    if not result.get("ok"): raise typer.Exit(1)
+
+@morphology_app.command("source-record")
+def morphology_source_record(record_id: int):
+    with session_scope() as s: echo(morph_get_table_row(s, "annotation_source_record", record_id))
+
+@morphology_app.command("analysis")
+def morphology_analysis(analysis_id: int):
+    with session_scope() as s: echo(morph_get_table_row(s, "morphological_analysis", analysis_id))
+
+@morph_alignment_app.command("inspect")
+def morphology_alignment_inspect(alignment_id: int):
+    with session_scope() as s: echo(morph_get_table_row(s, "annotation_alignment", alignment_id))
+
+@morph_alignment_app.command("show-token")
+def morphology_alignment_show_token(token_locator: str, annotation_source: int = typer.Option(..., "--annotation-source")):
+    with session_scope() as s: echo(morph_show_token(s, token_locator, annotation_source))
+
+@morph_alignment_app.command("unresolved")
+def morphology_alignment_unresolved(annotation_source: int = typer.Option(..., "--annotation-source"), status: str = typer.Option(..., "--status")):
+    with session_scope() as s: echo(morph_unresolved(s, annotation_source, status))
+
+@morphology_app.command("conflicts")
+def morphology_conflicts(annotation_source: int = typer.Option(..., "--annotation-source"), dimension: str = typer.Option(..., "--dimension")):
+    with session_scope() as s: echo(morph_conflicts(s, annotation_source, dimension))
+
+@morphology_app.command("stats")
+def morphology_stats(ingestion_run_id: int):
+    with session_scope() as s: echo(morph_stats(s, ingestion_run_id))
+
+@morphology_app.command("export")
+def morphology_export(ingestion_run_id: int, entity: str = typer.Option(..., "--entity"), format: str = typer.Option(..., "--format"), output: Path = typer.Option(..., "--output")):
+    with session_scope() as s: echo(morph_export_entity(s, ingestion_run_id, entity, format, output))
+
+@morphology_app.command("verify-export")
+def morphology_verify_export(path: Path):
+    with session_scope() as s:
+        result = morph_verify_export(s, path)
     echo(result)
     if not result.get("ok"): raise typer.Exit(1)
 
