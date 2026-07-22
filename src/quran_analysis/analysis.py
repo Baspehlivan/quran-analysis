@@ -236,27 +236,56 @@ def write_export(session: Any, run_id: int, fmt: str, output: Path) -> dict[str,
     return manifest | {"manifest_path": str(manifest_path), "manifest_sha256": manifest_hash}
 
 
-def verify_export_file(path: Path) -> dict[str, Any]:
+CSV_INTEGER_FIELDS = {"text_unit_id", "orthographic_token_id", "surah", "ayah", "token_position_in_ayah", "global_token_position", "codepoint_start", "codepoint_end", "count", "occurrence_count", "n"}
+
+
+def _parse_csv_value(key: str, value: str | None) -> Any:
+    if value == "" or value is None:
+        return None
+    if key in CSV_INTEGER_FIELDS:
+        return int(value)
+    return value
+
+
+def parse_export_rows(path: Path, fmt: str) -> list[dict[str, Any]]:
+    if fmt == "json":
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, list):
+            raise ValueError("json export must contain a list")
+        return rows
+    if fmt == "jsonl":
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    if fmt == "csv":
+        with path.open(encoding="utf-8", newline="") as f:
+            return [{k: _parse_csv_value(k, v) for k, v in row.items()} for row in csv.DictReader(f)]
+    raise ValueError("unknown format")
+
+
+def verify_export_file(path: Path, session: Any | None = None) -> dict[str, Any]:
     manifest_path = path.with_suffix(path.suffix + ".manifest.json")
     if not manifest_path.exists():
         return {"ok": False, "error": "manifest missing"}
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     actual_sha = file_sha256(path)
-    if actual_sha != manifest.get("export_file_sha256"):
-        return {"ok": False, "error": "export_file_sha256 mismatch", "expected": manifest.get("export_file_sha256"), "actual": actual_sha}
     fmt = manifest.get("format")
-    if fmt == "json":
-        rows = json.loads(path.read_text(encoding="utf-8"))
-    elif fmt == "jsonl":
-        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
-    elif fmt == "csv":
-        with path.open(encoding="utf-8", newline="") as f:
-            rows = list(csv.DictReader(f))
-    else:
-        return {"ok": False, "error": "unknown format"}
-    if len(rows) != manifest.get("export_row_count"):
-        return {"ok": False, "error": "row count mismatch", "expected": manifest.get("export_row_count"), "actual": len(rows)}
-    return {"ok": True, "manifest": manifest, "export_file_sha256": actual_sha, "export_row_count": len(rows)}
+    try:
+        rows = parse_export_rows(path, fmt)
+    except Exception as exc:
+        return {"ok": False, "error": "export parse failed", "detail": str(exc)}
+    computed_evidence_hash = compute_evidence_hash(rows)
+    checks = {
+        "export_file_sha256_match": actual_sha == manifest.get("export_file_sha256"),
+        "row_count_match": len(rows) == manifest.get("export_row_count"),
+        "evidence_hash_match_manifest": computed_evidence_hash == manifest.get("evidence_hash"),
+    }
+    db_evidence_hash = None
+    if session is not None:
+        run = session.get(AnalysisRun, manifest.get("analysis_run_id"))
+        db_evidence_hash = run.evidence_hash if run else None
+        checks["evidence_hash_match_db"] = computed_evidence_hash == db_evidence_hash
+        checks["db_run_completed"] = bool(run and run.status == "completed")
+    ok = all(checks.values())
+    return {"ok": ok, "checks": checks, "manifest": manifest, "export_file_sha256": actual_sha, "export_row_count": len(rows), "computed_evidence_hash": computed_evidence_hash, "db_evidence_hash": db_evidence_hash, "row_order_policy": "order-independent canonical evidence hashing sorts rows before hashing"}
 
 
 def verify_run(session: Any, run_id: int) -> dict[str, Any]:

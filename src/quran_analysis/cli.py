@@ -160,7 +160,9 @@ def analysis_export(run_id: int, format: str=typer.Option("json", "--format"), o
 
 @analysis_app.command("verify-export")
 def analysis_verify_export(path: Path):
-    result = verify_export_file(path); echo(result)
+    with session_scope() as s:
+        result = verify_export_file(path, s)
+    echo(result)
     if not result.get("ok"): raise typer.Exit(1)
 
 @analysis_app.command("verify")
