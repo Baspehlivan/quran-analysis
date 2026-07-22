@@ -10,7 +10,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select
 
-from quran_analysis.analysis import exact_token_search, frequency_count, normalized_token_search, phrase_search, repeated_ngrams, substring_search, ensure_normalized_tokens, latest_source, tokens_query
+from quran_analysis.analysis import exact_token_search, frequency_count, normalized_token_search, phrase_search, repeated_ngrams, substring_search, ensure_normalized_tokens, latest_source, tokens_query, verify_export_file, verify_run, write_export
 from quran_analysis.config import settings
 from quran_analysis.db.session import get_session_local
 from quran_analysis.ingestion.memory import ingest_memory, ingest_source_release, validate_source_release
@@ -26,6 +26,9 @@ for sub, name in [(db_app,"db"),(source_app,"source"),(unicode_app,"unicode"),(a
 
 
 def echo(obj): typer.echo(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
+def preview(run, results, limit=50, offset=0):
+    sliced=results[offset:offset+limit]
+    return {"analysis_run_id": run.id, "query_hash": run.query_hash, "evidence_hash": getattr(run, "evidence_hash", None), "result_count": len(results), "limit": limit, "offset": offset, "truncated": offset + len(sliced) < len(results), "results": sliced}
 def session_scope(): return get_session_local()()
 def _state(source: Path): return ingest_memory(source)
 
@@ -108,29 +111,29 @@ def scope_create(): c=numbered_only(); echo({"configuration":c,"sha256":scope_ha
 def scope_inspect(config: str): c=json.loads(config); echo({"configuration":c,"sha256":scope_hash(c)})
 
 @search_app.command("exact-token")
-def cli_exact_token(surface: str=typer.Option(..., "--surface"), scope: str=typer.Option("numbered_ayah", "--scope")):
-    with session_scope() as s: run, results = exact_token_search(s, surface, scope); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+def cli_exact_token(surface: str=typer.Option(..., "--surface"), scope: str=typer.Option("numbered_ayah", "--scope"), limit: int=typer.Option(50, "--limit"), offset: int=typer.Option(0, "--offset"), allow_dirty: bool=typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: run, results = exact_token_search(s, surface, scope, allow_dirty); echo(preview(run, results, limit, offset))
 
 @search_app.command("substring")
 def cli_substring(value: str=typer.Option(..., "--value"), representation: str=typer.Option("raw", "--representation")):
     if representation != "raw": raise typer.BadParameter("only --representation raw is supported")
-    with session_scope() as s: run, results = substring_search(s, value); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+    with session_scope() as s: run, results = substring_search(s, value, True); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
 
 @search_app.command("normalized-token")
-def cli_normalized_token(value: str=typer.Option(..., "--value"), profile: str=typer.Option(..., "--profile"), scope: str=typer.Option("numbered_ayah", "--scope")):
-    with session_scope() as s: run, results = normalized_token_search(s, value, profile, scope); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+def cli_normalized_token(value: str=typer.Option(..., "--value"), profile: str=typer.Option(..., "--profile"), scope: str=typer.Option("numbered_ayah", "--scope"), limit: int=typer.Option(50, "--limit"), offset: int=typer.Option(0, "--offset"), allow_dirty: bool=typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: run, results = normalized_token_search(s, value, profile, scope, allow_dirty); echo(preview(run, results, limit, offset))
 
 @search_app.command("phrase")
-def cli_phrase(value: str=typer.Option(..., "--value"), representation: str=typer.Option("raw-token", "--representation"), profile: Optional[str]=typer.Option(None, "--profile"), cross_unit: bool=typer.Option(False, "--cross-unit")):
-    with session_scope() as s: run, results = phrase_search(s, value, representation, profile, cross_unit); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+def cli_phrase(value: str=typer.Option(..., "--value"), representation: str=typer.Option("raw-token", "--representation"), profile: Optional[str]=typer.Option(None, "--profile"), cross_unit: bool=typer.Option(False, "--cross-unit"), limit: int=typer.Option(50, "--limit"), offset: int=typer.Option(0, "--offset"), allow_dirty: bool=typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: run, results = phrase_search(s, value, representation, profile, cross_unit, allow_dirty); echo(preview(run, results, limit, offset))
 
 @count_app.command("token-frequencies")
-def cli_token_freq(representation: str=typer.Option(..., "--representation"), scope: str=typer.Option("numbered_ayah", "--scope"), profile: Optional[str]=typer.Option(None, "--profile")):
-    with session_scope() as s: run, results = frequency_count(s, representation, profile, scope); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+def cli_token_freq(representation: str=typer.Option(..., "--representation"), scope: str=typer.Option("numbered_ayah", "--scope"), profile: Optional[str]=typer.Option(None, "--profile"), limit: int=typer.Option(50, "--limit"), offset: int=typer.Option(0, "--offset"), allow_dirty: bool=typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: run, results = frequency_count(s, representation, profile, scope, allow_dirty); echo(preview(run, results, limit, offset))
 
 @ngrams_app.command("repeated")
-def cli_ngrams(n: int=typer.Option(..., "--n"), representation: str=typer.Option("raw-token", "--representation"), profile: Optional[str]=typer.Option(None, "--profile"), cross_unit: bool=typer.Option(False, "--cross-unit")):
-    with session_scope() as s: run, results = repeated_ngrams(s, n, representation, profile, cross_unit); echo({"analysis_run_id": run.id, "result_count": len(results), "results": results})
+def cli_ngrams(n: int=typer.Option(..., "--n"), representation: str=typer.Option("raw-token", "--representation"), profile: Optional[str]=typer.Option(None, "--profile"), cross_unit: bool=typer.Option(False, "--cross-unit"), limit: int=typer.Option(50, "--limit"), offset: int=typer.Option(0, "--offset"), allow_dirty: bool=typer.Option(False, "--allow-dirty")):
+    with session_scope() as s: run, results = repeated_ngrams(s, n, representation, profile, cross_unit, allow_dirty); echo(preview(run, results, limit, offset))
 
 @export_app.command("tokens")
 def export_tokens(scope: str=typer.Option("numbered_ayah", "--scope"), format: str=typer.Option("csv", "--format")):
@@ -150,5 +153,20 @@ def export_normalized_tokens(profile: str=typer.Option(..., "--profile"), scope:
 
 @analysis_app.command("show")
 def analysis_show(): typer.echo("analysis persistence enabled via analysis_run / analysis_evidence and data/analysis_runs exports")
+
+@analysis_app.command("export")
+def analysis_export(run_id: int, format: str=typer.Option("json", "--format"), output: Path=typer.Option(..., "--output")):
+    with session_scope() as s: echo(write_export(s, run_id, format, output))
+
+@analysis_app.command("verify-export")
+def analysis_verify_export(path: Path):
+    result = verify_export_file(path); echo(result)
+    if not result.get("ok"): raise typer.Exit(1)
+
+@analysis_app.command("verify")
+def analysis_verify(run_id: int):
+    with session_scope() as s: result = verify_run(s, run_id)
+    echo(result)
+    if not result.get("ok"): raise typer.Exit(1)
 
 if __name__ == "__main__": app()

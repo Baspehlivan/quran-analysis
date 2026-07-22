@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, JSON
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from quran_analysis.models.base import Base
@@ -162,6 +162,13 @@ class QueryScopeDefinition(Base):
     is_frozen: Mapped[bool] = mapped_column(Boolean(), default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
     __table_args__ = (UniqueConstraint("name", "version"),)
+class EnvironmentSnapshot(Base):
+    __tablename__ = "environment_snapshot"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    canonical_json: Mapped[dict] = mapped_column(JSONType)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
 class AnalysisRun(Base):
     __tablename__ = "analysis_run"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -173,12 +180,35 @@ class AnalysisRun(Base):
     software_version: Mapped[str] = mapped_column(String(40))
     query_parameters_json: Mapped[dict] = mapped_column(JSONType)
     query_hash: Mapped[str] = mapped_column(String(64))
+    query_hash_algorithm_version: Mapped[str | None] = mapped_column(String(40))
+    evidence_hash: Mapped[str | None] = mapped_column(String(64))
+    evidence_hash_algorithm_version: Mapped[str | None] = mapped_column(String(40))
+    environment_snapshot_id: Mapped[int | None] = mapped_column(ForeignKey("environment_snapshot.id"))
+    environment_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    git_commit_hash: Mapped[str | None] = mapped_column(String(64))
+    git_dirty: Mapped[bool | None] = mapped_column(Boolean())
+    schema_revision: Mapped[str | None] = mapped_column(String(40))
     started_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime())
     status: Mapped[str] = mapped_column(String(40))
     result_count: Mapped[int | None]
     result_manifest_path: Mapped[str | None] = mapped_column(Text())
     error_message: Mapped[str | None] = mapped_column(Text())
+    __table_args__ = (Index("ix_analysis_run_query_hash", "query_hash"), Index("ix_analysis_run_evidence_hash", "evidence_hash"), Index("ix_analysis_run_source_scope", "source_release_id", "normalization_profile_id"),)
+
+class ExportManifest(Base):
+    __tablename__ = "export_manifest"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    analysis_run_id: Mapped[int] = mapped_column(ForeignKey("analysis_run.id"))
+    path: Mapped[str] = mapped_column(Text())
+    format: Mapped[str] = mapped_column(String(20))
+    export_schema_version: Mapped[str] = mapped_column(String(40))
+    export_file_sha256: Mapped[str] = mapped_column(String(64))
+    manifest_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    canonical_json: Mapped[dict] = mapped_column(JSONType)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+    __table_args__ = (Index("ix_export_manifest_run", "analysis_run_id"),)
+
 class AnalysisEvidence(Base):
     __tablename__ = "analysis_evidence"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -192,3 +222,4 @@ class AnalysisEvidence(Base):
     normalized_value: Mapped[str | None] = mapped_column(Text())
     inclusion_reason: Mapped[str] = mapped_column(Text())
     evidence_json: Mapped[dict] = mapped_column(JSONType, default=dict)
+    __table_args__ = (Index("ix_analysis_evidence_run_order", "analysis_run_id", "result_index"), Index("ix_analysis_evidence_lookup", "text_unit_id", "orthographic_token_id"),)

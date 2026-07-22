@@ -10,9 +10,9 @@ from typing import Any
 from sqlalchemy import select, update
 
 from quran_analysis import __version__
-from quran_analysis.models.tables import AnalysisEvidence, AnalysisRun, NormalizationProfile, NormalizedToken, OrthographicToken, SourceRelease, TextUnit, UnicodeCodepoint
+from quran_analysis.models.tables import AnalysisEvidence, AnalysisRun, EnvironmentSnapshot, ExportManifest, NormalizationProfile, NormalizedToken, OrthographicToken, SourceRelease, TextUnit, UnicodeCodepoint
 from quran_analysis.normalization.profiles import PROFILES, normalize_token
-from quran_analysis.provenance import environment, stable_hash
+from quran_analysis.provenance import EVIDENCE_HASH_ALGORITHM_VERSION, EXPORT_SCHEMA_VERSION, QUERY_HASH_ALGORITHM_VERSION, canonical_hash, environment, environment_snapshot_payload, evidence_hash as compute_evidence_hash, file_sha256, git_dirty, ngram_sequence_hash, query_hash_payload, utc_now_iso
 from quran_analysis.tokenization.core import TOKENIZER_CONFIGURATION_SHA256, TOKENIZER_VERSION
 
 DEFAULT_SCOPE = {"name": "numbered_ayah", "version": "v1", "unit_type": "numbered_ayah"}
@@ -89,9 +89,19 @@ def ensure_normalized_tokens(session: Any, source_id: int, profile_id: str) -> N
     return pr
 
 
-def make_run(session: Any, analysis_type: str, source: SourceRelease, scope: dict[str, Any], profile: NormalizationProfile | None, params: dict[str, Any]) -> tuple[AnalysisRun, str]:
-    qh = stable_hash({"analysis_type": analysis_type, "source_sha256": source.sha256, "scope": scope, "profile_hash": profile.configuration_sha256 if profile else None, "params": params, "tokenizer_hash": TOKENIZER_CONFIGURATION_SHA256})
-    run = AnalysisRun(analysis_type=analysis_type, source_release_id=source.id, scope_configuration_json=scope, normalization_profile_id=profile.id if profile else None, tokenizer_version=TOKENIZER_VERSION, software_version=__version__, query_parameters_json=params | {"environment": environment(session)}, query_hash=qh, status="running", result_count=None, completed_at=None, result_manifest_path=None, error_message=None)
+def make_run(session: Any, analysis_type: str, source: SourceRelease, scope: dict[str, Any], profile: NormalizationProfile | None, params: dict[str, Any], allow_dirty: bool = False) -> tuple[AnalysisRun, str]:
+    if git_dirty(Path.cwd()) and not allow_dirty:
+        raise ValueError("refusing reproducible analysis from dirty git tree; pass --allow-dirty")
+    payload = query_hash_payload(analysis_type=analysis_type, source=source, scope=scope, profile=profile, params=params, representation=params.get("representation"), cross_unit=params.get("cross_unit"), n=params.get("n"), session=session)
+    qh = canonical_hash(payload)
+    snap_payload = environment_snapshot_payload(session, source=source, scope=scope, profile=profile, command_name=analysis_type, query_params=params)
+    snap_hash = canonical_hash(snap_payload)
+    snap = session.scalar(select(EnvironmentSnapshot).where(EnvironmentSnapshot.content_hash == snap_hash))
+    if snap is None:
+        snap = EnvironmentSnapshot(content_hash=snap_hash, canonical_json=snap_payload)
+        session.add(snap); session.flush()
+    env = environment(session)
+    run = AnalysisRun(analysis_type=analysis_type, source_release_id=source.id, scope_configuration_json=scope, normalization_profile_id=profile.id if profile else None, tokenizer_version=TOKENIZER_VERSION, software_version=__version__, query_parameters_json=params, query_hash=qh, query_hash_algorithm_version=QUERY_HASH_ALGORITHM_VERSION, evidence_hash=None, evidence_hash_algorithm_version=EVIDENCE_HASH_ALGORITHM_VERSION, environment_snapshot_id=snap.id, environment_snapshot_hash=snap_hash, git_commit_hash=env.get("git_commit_hash"), git_dirty=env.get("git_dirty"), schema_revision=env.get("alembic_revision"), status="running", result_count=None, completed_at=None, result_manifest_path=None, error_message=None)
     session.add(run); session.commit(); session.refresh(run)
     return run, qh
 
@@ -106,7 +116,8 @@ def finish_run(session: Any, run: AnalysisRun, results: list[dict[str, Any]], ou
         keys = sorted({k for r in results for k in r.keys() if not isinstance(r.get(k), (dict, list))})
         with csv_path.open("w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys); w.writeheader(); w.writerows([{k: r.get(k) for k in keys} for r in results])
-    session.execute(update(AnalysisRun).where(AnalysisRun.id == run.id).values(status="completed", completed_at=datetime.utcnow(), result_count=len(results), result_manifest_path=str(json_path)))
+    eh = compute_evidence_hash(results)
+    session.execute(update(AnalysisRun).where(AnalysisRun.id == run.id).values(status="completed", completed_at=datetime.utcnow(), result_count=len(results), result_manifest_path=str(json_path), evidence_hash=eh, evidence_hash_algorithm_version=EVIDENCE_HASH_ALGORITHM_VERSION))
     for idx, r in enumerate(results, 1):
         text_unit_id = r.get("text_unit_id") or r.get("first_text_unit_id")
         if text_unit_id is None:
@@ -119,21 +130,21 @@ def result_for_token(token: OrthographicToken, unit: TextUnit, source: SourceRel
     return {"text_unit_id": unit.id, "orthographic_token_id": token.id, "surah": unit.surah_number, "ayah": unit.ayah_number, "token_position_in_ayah": token.token_in_unit, "global_token_position": token.token_in_full_source_stream, "raw_surface": token.surface_raw, "normalized_surface": normalized, "codepoint_start": token.start_codepoint_in_unit, "codepoint_end": token.end_codepoint_in_unit, "source_release_sha256": source.sha256, "tokenizer_version": token.tokenizer_version, "tokenizer_configuration_sha256": TOKENIZER_CONFIGURATION_SHA256, "normalization_profile_sha256": profile.configuration_sha256 if profile else None, "query_hash": query_hash}
 
 
-def exact_token_search(session: Any, surface: str, scope: str = "numbered_ayah") -> tuple[AnalysisRun, list[dict[str, Any]]]:
-    source = latest_source(session); sc = scope_config(scope); run, qh = make_run(session, "exact_raw_token_search", source, sc, None, {"surface": surface})
+def exact_token_search(session: Any, surface: str, scope: str = "numbered_ayah", allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    source = latest_source(session); sc = scope_config(scope); run, qh = make_run(session, "exact_raw_token_search", source, sc, None, {"surface": surface}, allow_dirty)
     results = [result_for_token(t, u, source, qh) for t, u in session.execute(tokens_query(source.id)).all() if t.surface_raw == surface]
     finish_run(session, run, results); return run, results
 
 
-def normalized_token_search(session: Any, value: str, profile_id: str, scope: str = "numbered_ayah") -> tuple[AnalysisRun, list[dict[str, Any]]]:
-    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id); sc = scope_config(scope); run, qh = make_run(session, "exact_normalized_token_search", source, sc, pr, {"value": value, "profile": profile_id})
+def normalized_token_search(session: Any, value: str, profile_id: str, scope: str = "numbered_ayah", allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id); sc = scope_config(scope); run, qh = make_run(session, "exact_normalized_token_search", source, sc, pr, {"value": value, "profile": profile_id}, allow_dirty)
     rows = session.execute(select(OrthographicToken, TextUnit, NormalizedToken).join(TextUnit, OrthographicToken.text_unit_id == TextUnit.id).join(NormalizedToken, NormalizedToken.orthographic_token_id == OrthographicToken.id).where(TextUnit.source_release_id == source.id, NormalizedToken.normalization_profile_id == pr.id).order_by(OrthographicToken.token_in_full_source_stream)).all()
     results = [result_for_token(t, u, source, qh, pr, nt.normalized_value) | {"normalized_to_source_codepoint_ids": nt.normalized_to_source_codepoint_ids_json} for t, u, nt in rows if nt.normalized_value == value]
     finish_run(session, run, results); return run, results
 
 
-def substring_search(session: Any, value: str) -> tuple[AnalysisRun, list[dict[str, Any]]]:
-    source = latest_source(session); run, qh = make_run(session, "raw_substring_search", source, DEFAULT_SCOPE, None, {"value": value, "representation": "raw"})
+def substring_search(session: Any, value: str, allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    source = latest_source(session); run, qh = make_run(session, "raw_substring_search", source, DEFAULT_SCOPE, None, {"value": value, "representation": "raw"}, allow_dirty)
     results=[]
     for unit in session.scalars(select(TextUnit).where(TextUnit.source_release_id == source.id).order_by(TextUnit.source_order)).all():
         start = 0
@@ -146,8 +157,8 @@ def substring_search(session: Any, value: str) -> tuple[AnalysisRun, list[dict[s
     finish_run(session, run, results); return run, results
 
 
-def frequency_count(session: Any, representation: str, profile_id: str | None = None, scope: str = "numbered_ayah") -> tuple[AnalysisRun, list[dict[str, Any]]]:
-    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if profile_id else None; run, qh = make_run(session, "token_frequency_count", source, scope_config(scope), pr, {"representation": representation, "profile": profile_id})
+def frequency_count(session: Any, representation: str, profile_id: str | None = None, scope: str = "numbered_ayah", allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if profile_id else None; run, qh = make_run(session, "token_frequency_count", source, scope_config(scope), pr, {"representation": representation, "profile": profile_id}, allow_dirty)
     counter: Counter[str] = Counter()
     if representation == "raw-token":
         for t, _u in session.execute(tokens_query(source.id)).all(): counter[t.surface_raw] += 1
@@ -157,8 +168,8 @@ def frequency_count(session: Any, representation: str, profile_id: str | None = 
     finish_run(session, run, results); return run, results
 
 
-def phrase_search(session: Any, phrase: str, representation: str = "raw-token", profile_id: str | None = None, cross_unit: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
-    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if representation == "normalized-token" else None; query_tokens = phrase.split(); run, qh = make_run(session, "phrase_search", source, DEFAULT_SCOPE, pr, {"phrase": phrase, "representation": representation, "cross_unit": cross_unit})
+def phrase_search(session: Any, phrase: str, representation: str = "raw-token", profile_id: str | None = None, cross_unit: bool = False, allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if representation == "normalized-token" else None; query_tokens = phrase.split(); run, qh = make_run(session, "phrase_search", source, DEFAULT_SCOPE, pr, {"phrase": phrase, "representation": representation, "cross_unit": cross_unit}, allow_dirty)
     rows=[]
     if pr:
         data = session.execute(select(OrthographicToken, TextUnit, NormalizedToken).join(TextUnit, OrthographicToken.text_unit_id == TextUnit.id).join(NormalizedToken, NormalizedToken.orthographic_token_id == OrthographicToken.id).where(TextUnit.source_release_id == source.id, NormalizedToken.normalization_profile_id == pr.id).order_by(OrthographicToken.token_in_full_source_stream)).all()
@@ -175,9 +186,9 @@ def phrase_search(session: Any, phrase: str, representation: str = "raw-token", 
     finish_run(session, run, results); return run, results
 
 
-def repeated_ngrams(session: Any, n: int, representation: str = "raw-token", profile_id: str | None = None, cross_unit: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+def repeated_ngrams(session: Any, n: int, representation: str = "raw-token", profile_id: str | None = None, cross_unit: bool = False, allow_dirty: bool = False) -> tuple[AnalysisRun, list[dict[str, Any]]]:
     if n < 2 or n > 10: raise ValueError("n must be 2..10")
-    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if representation == "normalized-token" else None; run, qh = make_run(session, "repeated_ngrams", source, DEFAULT_SCOPE, pr, {"n": n, "representation": representation, "cross_unit": cross_unit})
+    source = latest_source(session); pr = ensure_normalized_tokens(session, source.id, profile_id) if representation == "normalized-token" else None; run, qh = make_run(session, "repeated_ngrams", source, DEFAULT_SCOPE, pr, {"n": n, "representation": representation, "cross_unit": cross_unit}, allow_dirty)
     if pr:
         data = session.execute(select(OrthographicToken, TextUnit, NormalizedToken).join(TextUnit, OrthographicToken.text_unit_id == TextUnit.id).join(NormalizedToken, NormalizedToken.orthographic_token_id == OrthographicToken.id).where(TextUnit.source_release_id == source.id, NormalizedToken.normalization_profile_id == pr.id).order_by(OrthographicToken.token_in_full_source_stream)).all()
         rows=[(t,u,nt.normalized_value) for t,u,nt in data]
@@ -187,7 +198,69 @@ def repeated_ngrams(session: Any, n: int, representation: str = "raw-token", pro
     for i in range(0, len(rows)-n+1):
         window=rows[i:i+n]
         if not cross_unit and len({u.id for _,u,_ in window}) > 1: continue
-        seq=" ".join(v for _,_,v in window); t,u,_=window[0]
-        locs[seq].append({"surah": u.surah_number, "ayah": u.ayah_number, "token_position_in_ayah": t.token_in_unit, "global_token_position": t.token_in_full_source_stream})
-    results=[{"sequence": seq, "sequence_hash": stable_hash(seq), "n": n, "occurrence_count": len(loc), "locations": loc, "source_release_sha256": source.sha256, "normalization_profile_sha256": pr.configuration_sha256 if pr else None, "tokenizer_version": TOKENIZER_VERSION, "tokenizer_configuration_sha256": TOKENIZER_CONFIGURATION_SHA256, "query_hash": qh, "first_text_unit_id": loc[0]["surah"] if False else rows[0][1].id} for seq, loc in sorted(locs.items()) if len(loc) > 1]
+        tokens=[v for _,_,v in window]; seq=" ".join(tokens); t,u,_=window[0]
+        locs[seq].append({"text_unit_id": u.id, "surah": u.surah_number, "ayah": u.ayah_number, "token_position_in_ayah": t.token_in_unit, "global_token_position": t.token_in_full_source_stream, "tokens": tokens})
+    results=[{"sequence": seq, "sequence_hash": ngram_sequence_hash(loc[0]["tokens"], representation=representation, normalization_profile_sha256=pr.configuration_sha256 if pr else None, n=n), "n": n, "occurrence_count": len(loc), "locations": [{k:v for k,v in item.items() if k != "tokens"} for item in loc], "source_release_sha256": source.sha256, "normalization_profile_sha256": pr.configuration_sha256 if pr else None, "tokenizer_version": TOKENIZER_VERSION, "tokenizer_configuration_sha256": TOKENIZER_CONFIGURATION_SHA256, "query_hash": qh, "first_text_unit_id": loc[0]["text_unit_id"], "first_global_token_position": loc[0]["global_token_position"]} for seq, loc in sorted(locs.items()) if len(loc) > 1]
     finish_run(session, run, results); return run, results
+
+
+EXPORT_FIELDS = ["text_unit_id", "orthographic_token_id", "surah", "ayah", "token_position_in_ayah", "global_token_position", "raw_surface", "normalized_surface", "codepoint_start", "codepoint_end", "sequence", "value", "count", "occurrence_count", "n", "sequence_hash", "source_release_sha256", "tokenizer_version", "tokenizer_configuration_sha256", "normalization_profile_sha256", "query_hash"]
+
+
+def run_results(session: Any, run_id: int) -> tuple[AnalysisRun, list[dict[str, Any]]]:
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise ValueError(f"analysis_run {run_id} not found")
+    rows = session.scalars(select(AnalysisEvidence).where(AnalysisEvidence.analysis_run_id == run_id).order_by(AnalysisEvidence.result_index)).all()
+    return run, [r.evidence_json for r in rows]
+
+
+def write_export(session: Any, run_id: int, fmt: str, output: Path) -> dict[str, Any]:
+    run, results = run_results(session, run_id)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if fmt == "json":
+        output.write_text(json.dumps(results, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    elif fmt == "jsonl":
+        output.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in results), encoding="utf-8")
+    elif fmt == "csv":
+        fields = [f for f in EXPORT_FIELDS if any(f in r and not isinstance(r.get(f), (dict, list)) for r in results)] or ["query_hash"]
+        with output.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fields, lineterminator="\n"); w.writeheader(); w.writerows([{k: r.get(k) for k in fields} for r in results])
+    else:
+        raise ValueError("format must be csv, json, or jsonl")
+    manifest = {"analysis_run_id": run.id, "query_hash": run.query_hash, "evidence_hash": run.evidence_hash, "source_sha256": session.get(SourceRelease, run.source_release_id).sha256, "environment_snapshot_hash": run.environment_snapshot_hash, "result_count": run.result_count, "export_row_count": len(results), "format": fmt, "export_schema_version": EXPORT_SCHEMA_VERSION, "export_file_sha256": file_sha256(output), "generated_at_utc": utc_now_iso(), "code_commit_hash": run.git_commit_hash, "dirty_status": run.git_dirty}
+    manifest_hash = canonical_hash(manifest)
+    manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+    manifest_path.write_text(json.dumps(manifest | {"manifest_sha256": manifest_hash}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    session.add(ExportManifest(analysis_run_id=run.id, path=str(output), format=fmt, export_schema_version=EXPORT_SCHEMA_VERSION, export_file_sha256=manifest["export_file_sha256"], manifest_sha256=manifest_hash, canonical_json=manifest)); session.commit()
+    return manifest | {"manifest_path": str(manifest_path), "manifest_sha256": manifest_hash}
+
+
+def verify_export_file(path: Path) -> dict[str, Any]:
+    manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+    if not manifest_path.exists():
+        return {"ok": False, "error": "manifest missing"}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    actual_sha = file_sha256(path)
+    if actual_sha != manifest.get("export_file_sha256"):
+        return {"ok": False, "error": "export_file_sha256 mismatch", "expected": manifest.get("export_file_sha256"), "actual": actual_sha}
+    fmt = manifest.get("format")
+    if fmt == "json":
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    elif fmt == "jsonl":
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    elif fmt == "csv":
+        with path.open(encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f))
+    else:
+        return {"ok": False, "error": "unknown format"}
+    if len(rows) != manifest.get("export_row_count"):
+        return {"ok": False, "error": "row count mismatch", "expected": manifest.get("export_row_count"), "actual": len(rows)}
+    return {"ok": True, "manifest": manifest, "export_file_sha256": actual_sha, "export_row_count": len(rows)}
+
+
+def verify_run(session: Any, run_id: int) -> dict[str, Any]:
+    run, results = run_results(session, run_id)
+    eh = compute_evidence_hash(results)
+    checks = {"status_completed": run.status == "completed", "environment_snapshot": bool(run.environment_snapshot_hash), "query_hash": bool(run.query_hash), "evidence_hash_match": eh == run.evidence_hash, "result_count_match": len(results) == run.result_count}
+    return {"ok": all(checks.values()), "analysis_run_id": run.id, "checks": checks, "query_hash": run.query_hash, "evidence_hash": run.evidence_hash, "computed_evidence_hash": eh, "result_count": run.result_count}
