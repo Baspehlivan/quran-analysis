@@ -1,0 +1,42 @@
+[project]
+name = "quran-analysis"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.13",
+  "psycopg[binary]>=3.2",
+  "pydantic>=2",
+  "pydantic-settings>=2",
+  "pytest>=8",
+  "regex>=2024",
+  "ruff>=0.6",
+  "SQLAlchemy>=2.0",
+  "typer>=0.12",
+]
+
+[project.scripts]
+quran = "quran_analysis.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = ["E701", "E702", "E501"]
+
+[[tool.mypy.overrides]]
+module = ["regex"]
+ignore_missing_imports = true
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+allow_untyped_globals = true
+check_untyped_defs = false
+disable_error_code = ["var-annotated", "arg-type", "assignment", "union-attr", "return-value", "misc"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

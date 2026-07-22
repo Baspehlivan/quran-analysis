@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: quran
+      POSTGRES_PASSWORD: quran
+      POSTGRES_DB: quran_analysis
+    ports:
+      - "55432:5432"
+    volumes:
+      - quran_analysis_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quran -d quran_analysis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  quran_analysis_pg:

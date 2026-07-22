@@ -1,0 +1,769 @@
+{
+  "adapter": "tanzil-text-with-ayah-numbers-v1",
+  "adapter_version": "tanzil-text-with-ayah-numbers-v1",
+  "byte_size": 1370878,
+  "classifications": {
+    "ayah_record": 6236,
+    "blank": 2,
+    "comment": 11,
+    "license": 10,
+    "source_metadata": 7
+  },
+  "diagnostics": {
+    "classifications": {
+      "ayah_record": 6236,
+      "blank": 2,
+      "comment": 11,
+      "license": 10,
+      "source_metadata": 7
+    },
+    "duplicate_addresses": [],
+    "empty_text": [],
+    "first_address": [
+      1,
+      1
+    ],
+    "gaps_in_ayah_numbering": [],
+    "invalid_numeric": [],
+    "last_address": [
+      114,
+      6
+    ],
+    "malformed": [],
+    "newline_inventory": {
+      "LF": 6266
+    },
+    "non_quran_record_count": 30,
+    "observed_surah_count": 114,
+    "quran_record_count": 6236,
+    "surah_order_gaps_reversals": [],
+    "unicode_inventory": [
+      {
+        "character": " ",
+        "count": 71645,
+        "general_category": "Zs",
+        "unicode_hex": "U+0020",
+        "unicode_name": "SPACE"
+      },
+      {
+        "character": "ء",
+        "count": 2782,
+        "general_category": "Lo",
+        "unicode_hex": "U+0621",
+        "unicode_name": "ARABIC LETTER HAMZA"
+      },
+      {
+        "character": "أ",
+        "count": 8900,
+        "general_category": "Lo",
+        "unicode_hex": "U+0623",
+        "unicode_name": "ARABIC LETTER ALEF WITH HAMZA ABOVE"
+      },
+      {
+        "character": "ؤ",
+        "count": 706,
+        "general_category": "Lo",
+        "unicode_hex": "U+0624",
+        "unicode_name": "ARABIC LETTER WAW WITH HAMZA ABOVE"
+      },
+      {
+        "character": "إ",
+        "count": 5088,
+        "general_category": "Lo",
+        "unicode_hex": "U+0625",
+        "unicode_name": "ARABIC LETTER ALEF WITH HAMZA BELOW"
+      },
+      {
+        "character": "ئ",
+        "count": 921,
+        "general_category": "Lo",
+        "unicode_hex": "U+0626",
+        "unicode_name": "ARABIC LETTER YEH WITH HAMZA ABOVE"
+      },
+      {
+        "character": "ا",
+        "count": 25184,
+        "general_category": "Lo",
+        "unicode_hex": "U+0627",
+        "unicode_name": "ARABIC LETTER ALEF"
+      },
+      {
+        "character": "ب",
+        "count": 11603,
+        "general_category": "Lo",
+        "unicode_hex": "U+0628",
+        "unicode_name": "ARABIC LETTER BEH"
+      },
+      {
+        "character": "ة",
+        "count": 2344,
+        "general_category": "Lo",
+        "unicode_hex": "U+0629",
+        "unicode_name": "ARABIC LETTER TEH MARBUTA"
+      },
+      {
+        "character": "ت",
+        "count": 10520,
+        "general_category": "Lo",
+        "unicode_hex": "U+062A",
+        "unicode_name": "ARABIC LETTER TEH"
+      },
+      {
+        "character": "ث",
+        "count": 1414,
+        "general_category": "Lo",
+        "unicode_hex": "U+062B",
+        "unicode_name": "ARABIC LETTER THEH"
+      },
+      {
+        "character": "ج",
+        "count": 3317,
+        "general_category": "Lo",
+        "unicode_hex": "U+062C",
+        "unicode_name": "ARABIC LETTER JEEM"
+      },
+      {
+        "character": "ح",
+        "count": 4364,
+        "general_category": "Lo",
+        "unicode_hex": "U+062D",
+        "unicode_name": "ARABIC LETTER HAH"
+      },
+      {
+        "character": "خ",
+        "count": 2497,
+        "general_category": "Lo",
+        "unicode_hex": "U+062E",
+        "unicode_name": "ARABIC LETTER KHAH"
+      },
+      {
+        "character": "د",
+        "count": 5991,
+        "general_category": "Lo",
+        "unicode_hex": "U+062F",
+        "unicode_name": "ARABIC LETTER DAL"
+      },
+      {
+        "character": "ذ",
+        "count": 4932,
+        "general_category": "Lo",
+        "unicode_hex": "U+0630",
+        "unicode_name": "ARABIC LETTER THAL"
+      },
+      {
+        "character": "ر",
+        "count": 12627,
+        "general_category": "Lo",
+        "unicode_hex": "U+0631",
+        "unicode_name": "ARABIC LETTER REH"
+      },
+      {
+        "character": "ز",
+        "count": 1599,
+        "general_category": "Lo",
+        "unicode_hex": "U+0632",
+        "unicode_name": "ARABIC LETTER ZAIN"
+      },
+      {
+        "character": "س",
+        "count": 6122,
+        "general_category": "Lo",
+        "unicode_hex": "U+0633",
+        "unicode_name": "ARABIC LETTER SEEN"
+      },
+      {
+        "character": "ش",
+        "count": 2124,
+        "general_category": "Lo",
+        "unicode_hex": "U+0634",
+        "unicode_name": "ARABIC LETTER SHEEN"
+      },
+      {
+        "character": "ص",
+        "count": 2074,
+        "general_category": "Lo",
+        "unicode_hex": "U+0635",
+        "unicode_name": "ARABIC LETTER SAD"
+      },
+      {
+        "character": "ض",
+        "count": 1686,
+        "general_category": "Lo",
+        "unicode_hex": "U+0636",
+        "unicode_name": "ARABIC LETTER DAD"
+      },
+      {
+        "character": "ط",
+        "count": 1273,
+        "general_category": "Lo",
+        "unicode_hex": "U+0637",
+        "unicode_name": "ARABIC LETTER TAH"
+      },
+      {
+        "character": "ظ",
+        "count": 853,
+        "general_category": "Lo",
+        "unicode_hex": "U+0638",
+        "unicode_name": "ARABIC LETTER ZAH"
+      },
+      {
+        "character": "ع",
+        "count": 9405,
+        "general_category": "Lo",
+        "unicode_hex": "U+0639",
+        "unicode_name": "ARABIC LETTER AIN"
+      },
+      {
+        "character": "غ",
+        "count": 1221,
+        "general_category": "Lo",
+        "unicode_hex": "U+063A",
+        "unicode_name": "ARABIC LETTER GHAIN"
+      },
+      {
+        "character": "ـ",
+        "count": 812,
+        "general_category": "Lm",
+        "unicode_hex": "U+0640",
+        "unicode_name": "ARABIC TATWEEL"
+      },
+      {
+        "character": "ف",
+        "count": 8747,
+        "general_category": "Lo",
+        "unicode_hex": "U+0641",
+        "unicode_name": "ARABIC LETTER FEH"
+      },
+      {
+        "character": "ق",
+        "count": 7034,
+        "general_category": "Lo",
+        "unicode_hex": "U+0642",
+        "unicode_name": "ARABIC LETTER QAF"
+      },
+      {
+        "character": "ك",
+        "count": 10497,
+        "general_category": "Lo",
+        "unicode_hex": "U+0643",
+        "unicode_name": "ARABIC LETTER KAF"
+      },
+      {
+        "character": "ل",
+        "count": 38550,
+        "general_category": "Lo",
+        "unicode_hex": "U+0644",
+        "unicode_name": "ARABIC LETTER LAM"
+      },
+      {
+        "character": "م",
+        "count": 27071,
+        "general_category": "Lo",
+        "unicode_hex": "U+0645",
+        "unicode_name": "ARABIC LETTER MEEM"
+      },
+      {
+        "character": "ن",
+        "count": 27380,
+        "general_category": "Lo",
+        "unicode_hex": "U+0646",
+        "unicode_name": "ARABIC LETTER NOON"
+      },
+      {
+        "character": "ه",
+        "count": 14962,
+        "general_category": "Lo",
+        "unicode_hex": "U+0647",
+        "unicode_name": "ARABIC LETTER HEH"
+      },
+      {
+        "character": "و",
+        "count": 24970,
+        "general_category": "Lo",
+        "unicode_hex": "U+0648",
+        "unicode_name": "ARABIC LETTER WAW"
+      },
+      {
+        "character": "ى",
+        "count": 6603,
+        "general_category": "Lo",
+        "unicode_hex": "U+0649",
+        "unicode_name": "ARABIC LETTER ALEF MAKSURA"
+      },
+      {
+        "character": "ي",
+        "count": 18334,
+        "general_category": "Lo",
+        "unicode_hex": "U+064A",
+        "unicode_name": "ARABIC LETTER YEH"
+      },
+      {
+        "character": "ً",
+        "count": 3741,
+        "general_category": "Mn",
+        "unicode_hex": "U+064B",
+        "unicode_name": "ARABIC FATHATAN"
+      },
+      {
+        "character": "ٌ",
+        "count": 2519,
+        "general_category": "Mn",
+        "unicode_hex": "U+064C",
+        "unicode_name": "ARABIC DAMMATAN"
+      },
+      {
+        "character": "ٍ",
+        "count": 2633,
+        "general_category": "Mn",
+        "unicode_hex": "U+064D",
+        "unicode_name": "ARABIC KASRATAN"
+      },
+      {
+        "character": "َ",
+        "count": 123396,
+        "general_category": "Mn",
+        "unicode_hex": "U+064E",
+        "unicode_name": "ARABIC FATHA"
+      },
+      {
+        "character": "ُ",
+        "count": 37320,
+        "general_category": "Mn",
+        "unicode_hex": "U+064F",
+        "unicode_name": "ARABIC DAMMA"
+      },
+      {
+        "character": "ِ",
+        "count": 46642,
+        "general_category": "Mn",
+        "unicode_hex": "U+0650",
+        "unicode_name": "ARABIC KASRA"
+      },
+      {
+        "character": "ّ",
+        "count": 23016,
+        "general_category": "Mn",
+        "unicode_hex": "U+0651",
+        "unicode_name": "ARABIC SHADDA"
+      },
+      {
+        "character": "ْ",
+        "count": 37372,
+        "general_category": "Mn",
+        "unicode_hex": "U+0652",
+        "unicode_name": "ARABIC SUKUN"
+      },
+      {
+        "character": "ٓ",
+        "count": 5376,
+        "general_category": "Mn",
+        "unicode_hex": "U+0653",
+        "unicode_name": "ARABIC MADDAH ABOVE"
+      },
+      {
+        "character": "ٔ",
+        "count": 773,
+        "general_category": "Mn",
+        "unicode_hex": "U+0654",
+        "unicode_name": "ARABIC HAMZA ABOVE"
+      },
+      {
+        "character": "ٰ",
+        "count": 9838,
+        "general_category": "Mn",
+        "unicode_hex": "U+0670",
+        "unicode_name": "ARABIC LETTER SUPERSCRIPT ALEF"
+      },
+      {
+        "character": "ٱ",
+        "count": 13819,
+        "general_category": "Lo",
+        "unicode_hex": "U+0671",
+        "unicode_name": "ARABIC LETTER ALEF WASLA"
+      },
+      {
+        "character": "ۜ",
+        "count": 2,
+        "general_category": "Mn",
+        "unicode_hex": "U+06DC",
+        "unicode_name": "ARABIC SMALL HIGH SEEN"
+      },
+      {
+        "character": "۟",
+        "count": 3988,
+        "general_category": "Mn",
+        "unicode_hex": "U+06DF",
+        "unicode_name": "ARABIC SMALL HIGH ROUNDED ZERO"
+      },
+      {
+        "character": "۠",
+        "count": 66,
+        "general_category": "Mn",
+        "unicode_hex": "U+06E0",
+        "unicode_name": "ARABIC SMALL HIGH UPRIGHT RECTANGULAR ZERO"
+      },
+      {
+        "character": "ۢ",
+        "count": 510,
+        "general_category": "Mn",
+        "unicode_hex": "U+06E2",
+        "unicode_name": "ARABIC SMALL HIGH MEEM ISOLATED FORM"
+      },
+      {
+        "character": "ۣ",
+        "count": 1,
+        "general_category": "Mn",
+        "unicode_hex": "U+06E3",
+        "unicode_name": "ARABIC SMALL LOW SEEN"
+      },
+      {
+        "character": "ۥ",
+        "count": 1257,
+        "general_category": "Lm",
+        "unicode_hex": "U+06E5",
+        "unicode_name": "ARABIC SMALL WAW"
+      },
+      {
+        "character": "ۦ",
+        "count": 957,
+        "general_category": "Lm",
+        "unicode_hex": "U+06E6",
+        "unicode_name": "ARABIC SMALL YEH"
+      },
+      {
+        "character": "ۧ",
+        "count": 38,
+        "general_category": "Mn",
+        "unicode_hex": "U+06E7",
+        "unicode_name": "ARABIC SMALL HIGH YEH"
+      },
+      {
+        "character": "ۨ",
+        "count": 1,
+        "general_category": "Mn",
+        "unicode_hex": "U+06E8",
+        "unicode_name": "ARABIC SMALL HIGH NOON"
+      },
+      {
+        "character": "۪",
+        "count": 1,
+        "general_category": "Mn",
+        "unicode_hex": "U+06EA",
+        "unicode_name": "ARABIC EMPTY CENTRE LOW STOP"
+      },
+      {
+        "character": "۫",
+        "count": 1,
+        "general_category": "Mn",
+        "unicode_hex": "U+06EB",
+        "unicode_name": "ARABIC EMPTY CENTRE HIGH STOP"
+      },
+      {
+        "character": "۬",
+        "count": 1,
+        "general_category": "Mn",
+        "unicode_hex": "U+06EC",
+        "unicode_name": "ARABIC ROUNDED HIGH STOP WITH FILLED CENTRE"
+      },
+      {
+        "character": "ۭ",
+        "count": 99,
+        "general_category": "Mn",
+        "unicode_hex": "U+06ED",
+        "unicode_name": "ARABIC SMALL LOW MEEM"
+      }
+    ],
+    "unknown_lines": []
+  },
+  "encoding": "utf-8",
+  "is_normalized_NFC": false,
+  "is_normalized_NFD": false,
+  "is_normalized_NFKC": false,
+  "is_normalized_NFKD": false,
+  "line_count": 6266,
+  "newline_inventory": {
+    "LF": 6266
+  },
+  "non_quran_record_count": 30,
+  "non_quran_records": [
+    {
+      "byte_end": 1369771,
+      "byte_start": 1369770,
+      "classification_reason": "empty source line",
+      "line_ending": "\n",
+      "line_number": 6237,
+      "raw_line_content": "",
+      "record_type": "blank"
+    },
+    {
+      "byte_end": 1369772,
+      "byte_start": 1369771,
+      "classification_reason": "empty source line",
+      "line_ending": "\n",
+      "line_number": 6238,
+      "raw_line_content": "",
+      "record_type": "blank"
+    },
+    {
+      "byte_end": 1369826,
+      "byte_start": 1369772,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6239,
+      "raw_line_content": "# PLEASE DO NOT REMOVE OR CHANGE THIS COPYRIGHT BLOCK",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1369896,
+      "byte_start": 1369826,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6240,
+      "raw_line_content": "#====================================================================",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1369898,
+      "byte_start": 1369896,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6241,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1369942,
+      "byte_start": 1369898,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6242,
+      "raw_line_content": "#  Tanzil Quran Text (Uthmani, Version 1.1)",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1369984,
+      "byte_start": 1369942,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6243,
+      "raw_line_content": "#  Copyright (C) 2007-2026 Tanzil Project",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370029,
+      "byte_start": 1369984,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6244,
+      "raw_line_content": "#  License: Creative Commons Attribution 3.0",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370031,
+      "byte_start": 1370029,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6245,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370093,
+      "byte_start": 1370031,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6246,
+      "raw_line_content": "#  This copy of the Quran text is carefully produced, highly ",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370159,
+      "byte_start": 1370093,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6247,
+      "raw_line_content": "#  verified and continuously monitored by a group of specialists ",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370181,
+      "byte_start": 1370159,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6248,
+      "raw_line_content": "#  at Tanzil Project.",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370183,
+      "byte_start": 1370181,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6249,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370200,
+      "byte_start": 1370183,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6250,
+      "raw_line_content": "#  TERMS OF USE:",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370202,
+      "byte_start": 1370200,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6251,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370269,
+      "byte_start": 1370202,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6252,
+      "raw_line_content": "#  - Permission is granted to copy and distribute verbatim copies ",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370320,
+      "byte_start": 1370269,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6253,
+      "raw_line_content": "#    of this text, but CHANGING IT IS NOT ALLOWED.",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370322,
+      "byte_start": 1370320,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6254,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370387,
+      "byte_start": 1370322,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6255,
+      "raw_line_content": "#  - This Quran text can be used in any website or application, ",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370457,
+      "byte_start": 1370387,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6256,
+      "raw_line_content": "#    provided that its source (Tanzil Project) is clearly indicated, ",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370519,
+      "byte_start": 1370457,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6257,
+      "raw_line_content": "#    and a link is made to tanzil.net to enable users to keep",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370542,
+      "byte_start": 1370519,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6258,
+      "raw_line_content": "#    track of changes.",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370544,
+      "byte_start": 1370542,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6259,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370613,
+      "byte_start": 1370544,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6260,
+      "raw_line_content": "#  - This copyright notice shall be included in all verbatim copies ",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370683,
+      "byte_start": 1370613,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6261,
+      "raw_line_content": "#    of the text, and shall be reproduced appropriately in all files ",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370749,
+      "byte_start": 1370683,
+      "classification_reason": "confirmed Tanzil copyright/license footer line",
+      "line_ending": "\n",
+      "line_number": 6262,
+      "raw_line_content": "#    derived from or containing substantial portion of this text.",
+      "record_type": "license"
+    },
+    {
+      "byte_end": 1370751,
+      "byte_start": 1370749,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6263,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370806,
+      "byte_start": 1370751,
+      "classification_reason": "confirmed Tanzil source metadata/attribution footer line",
+      "line_ending": "\n",
+      "line_number": 6264,
+      "raw_line_content": "#  Please check updates at: http://tanzil.net/updates/",
+      "record_type": "source_metadata"
+    },
+    {
+      "byte_end": 1370808,
+      "byte_start": 1370806,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6265,
+      "raw_line_content": "#",
+      "record_type": "comment"
+    },
+    {
+      "byte_end": 1370878,
+      "byte_start": 1370808,
+      "classification_reason": "comment line",
+      "line_ending": "\n",
+      "line_number": 6266,
+      "raw_line_content": "#====================================================================",
+      "record_type": "comment"
+    }
+  ],
+  "original_filename": "quran-uthmani-v1.1v.txt",
+  "original_path": "data/incoming/quran-uthmani-v1.1v.txt",
+  "quran_record_count": 6236,
+  "sha256": "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8",
+  "source_format": "tanzil-text-with-ayah-numbers-v1",
+  "source_name": "tanzil-uthmani",
+  "source_version": "1.1",
+  "stored_filename": "tanzil-uthmani_1.1_tanzil-text-with-ayah-numbers-v1_bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8.txt",
+  "stored_path": "data/raw/tanzil-uthmani_1.1_tanzil-text-with-ayah-numbers-v1_bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8.txt"
+}

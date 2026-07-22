@@ -1,0 +1,17 @@
+.env
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+build/
+dist/
+*.egg-info/
+.pgdata/
+postgres-data/
+pgdata/
+data/analysis_runs/*
+.DS_Store
