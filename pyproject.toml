@@ -1,12 +1,13 @@
 [project]
 name = "quran-analysis"
-version = "0.2.1-phase2b"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.13",
   "psycopg[binary]>=3.2",
   "pydantic>=2",
   "pydantic-settings>=2",
+  "PyYAML>=6",
   "pytest>=8",
   "regex>=2024",
   "ruff>=0.6",

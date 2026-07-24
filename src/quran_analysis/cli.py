@@ -10,21 +10,52 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select
 
+from quran_analysis.annotation_sources.ingestion import ingest_qac_source
+from quran_analysis.annotation_sources.alignment import align_qac_source
+from quran_analysis.annotation_sources.capabilities import AnnotationFrameworkError, production_annotation_adapter_registry
+from quran_analysis.annotation_sources.catalog import (
+    SourceLifecycleError,
+    get_catalog_source,
+    guard_source_activation,
+    guard_source_ingestion,
+    list_catalog_sources,
+)
+from quran_analysis.annotation_sources.service import source_descriptor
+from quran_analysis.annotation_sources.registration import EXPECTED_CONFIGURATION_HASH, SqlRegistrationRepository, register_local_qac
 from quran_analysis.analysis import exact_token_search, frequency_count, normalized_token_search, phrase_search, repeated_ngrams, substring_search, ensure_normalized_tokens, latest_source, tokens_query, verify_export_file, verify_run, write_export
 from quran_analysis.config import settings
 from quran_analysis.db.session import get_session_local
 from quran_analysis.ingestion.memory import ingest_memory, ingest_source_release, validate_source_release
 from quran_analysis.models.tables import NormalizedToken, OrthographicToken, SourceRelease, TextUnit, UnicodeCodepoint
+from quran_analysis.morphology.analytics import MorphologyAnalyticsFilter, MorphologyAnalyticsService
+from quran_analysis.morphology.query import MorphologyQuery, MorphologyQueryService, SqlMorphologyRepository
 from quran_analysis.morphology.core import (conflicts as morph_conflicts, export_entity as morph_export_entity, get_table_row as morph_get_table_row, ingest_morphology, inspect_annotation_source, list_annotation_sources, register_annotation_source, show_annotation_source, show_token as morph_show_token, stats as morph_stats, unresolved as morph_unresolved, validate_annotation_source, validate_ingestion, verify_export as morph_verify_export)
 from quran_analysis.normalization.profiles import PROFILES, get_profile, normalize_token
 from quran_analysis.provenance import environment
+from quran_analysis.research import (
+    AggregateQuery, AggregationError, CooccurrenceQuery, ResearchEngine, ResearchQueryError, SetQuery, load_query,
+)
 from quran_analysis.scopes.core import numbered_only, scope_hash
 from quran_analysis.sources.register import inspect_source, register_source
+from quran_analysis.verification import (
+    VerificationError,
+    benchmark as verification_benchmark,
+    compatibility_locks,
+    database_counts,
+    golden_contract,
+    release_manifest,
+    render as render_verification,
+    replay_goldens,
+    research_certificate,
+    verify_goldens,
+)
 
 app = typer.Typer(no_args_is_help=True)
-db_app = typer.Typer(); source_app = typer.Typer(); unicode_app = typer.Typer(); ayah_app = typer.Typer(); token_app = typer.Typer(); norm_app = typer.Typer(); scope_app = typer.Typer(); count_app = typer.Typer(); search_app = typer.Typer(); analysis_app = typer.Typer(); environment_app = typer.Typer(); export_app = typer.Typer(); ngrams_app = typer.Typer(); annotation_source_app = typer.Typer(); morphology_app = typer.Typer(); morph_alignment_app = typer.Typer()
+db_app = typer.Typer(); source_app = typer.Typer(); unicode_app = typer.Typer(); ayah_app = typer.Typer(); token_app = typer.Typer(); norm_app = typer.Typer(); scope_app = typer.Typer(); count_app = typer.Typer(); search_app = typer.Typer(); analysis_app = typer.Typer(); environment_app = typer.Typer(); export_app = typer.Typer(); ngrams_app = typer.Typer(); annotation_source_app = typer.Typer(); morphology_app = typer.Typer(); morph_alignment_app = typer.Typer(); research_app = typer.Typer(no_args_is_help=True)
 morphology_app.add_typer(morph_alignment_app, name="alignment")
-for sub, name in [(db_app,"db"),(source_app,"source"),(unicode_app,"unicode"),(ayah_app,"ayah"),(token_app,"token"),(norm_app,"normalization"),(scope_app,"scope"),(count_app,"count"),(search_app,"search"),(analysis_app,"analysis"),(environment_app,"environment"),(export_app,"export"),(ngrams_app,"ngrams"),(annotation_source_app,"annotation-source"),(morphology_app,"morphology")]: app.add_typer(sub, name=name)
+morph_stats_app = typer.Typer(no_args_is_help=True)
+morphology_app.add_typer(morph_stats_app, name="stats")
+for sub, name in [(db_app,"db"),(source_app,"source"),(unicode_app,"unicode"),(ayah_app,"ayah"),(token_app,"token"),(norm_app,"normalization"),(scope_app,"scope"),(count_app,"count"),(search_app,"search"),(analysis_app,"analysis"),(environment_app,"environment"),(export_app,"export"),(ngrams_app,"ngrams"),(annotation_source_app,"annotation-source"),(morphology_app,"morphology"),(research_app,"research")]: app.add_typer(sub, name=name)
 
 
 def echo(obj): typer.echo(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
@@ -33,6 +64,34 @@ def preview(run, results, limit=50, offset=0):
     return {"analysis_run_id": run.id, "query_hash": run.query_hash, "evidence_hash": getattr(run, "evidence_hash", None), "result_count": len(results), "limit": limit, "offset": offset, "truncated": offset + len(sliced) < len(results), "results": sliced}
 def session_scope(): return get_session_local()()
 def _state(source: Path): return ingest_memory(source)
+
+@research_app.command("query")
+def research_query(query: Optional[str] = typer.Option(None, "--query"), file: Optional[Path] = typer.Option(None, "--file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
+    """Execute a bounded immutable research query from inline JSON/YAML or a query file."""
+    if (query is None) == (file is None):
+        raise typer.BadParameter("provide exactly one of --query or --file")
+    if format not in {"text", "json", "yaml"}:
+        raise typer.BadParameter("format must be text, json, or yaml")
+    try:
+        parsed = load_query(file if file is not None else query or "", input_format)
+        with session_scope() as s:
+            result = ResearchEngine(s).execute(parsed)
+        if format == "json":
+            typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
+        elif format == "yaml":
+            import yaml
+            typer.echo(yaml.safe_dump(result.to_dict(), allow_unicode=True, sort_keys=True))
+        else:
+            data = result.to_dict()
+            typer.echo(f"reproducibility_hash={data['metadata']['reproducibility_hash']}")
+            typer.echo(f"returned_rows={data['summary']['returned_rows']} total_matching_rows={data['summary']['total_matching_rows']}")
+            for match in result.matches:
+                coordinate = match.coordinate
+                typer.echo(f"{coordinate['surah']}:{coordinate['ayah']}:{coordinate['token']}:{match.segment} root={match.root} lemma={match.lemma} pos={match.pos}")
+    except (ResearchQueryError, AnnotationFrameworkError) as exc:
+        payload = exc.to_dict() if hasattr(exc, "to_dict") else {"code": "invalid_research_query", "message": str(exc)}
+        typer.echo(json.dumps(payload, ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
 
 @db_app.command("migrate")
 def db_migrate(): command.upgrade(Config("alembic.ini"), "head"); typer.echo("migrations applied")
@@ -174,6 +233,26 @@ def analysis_verify(run_id: int):
     if not result.get("ok"): raise typer.Exit(1)
 
 
+@annotation_source_app.command("register-local-qac")
+def annotation_source_register_local_qac(path: Path, original_filename: Optional[str] = typer.Option(None), expected_parser_configuration_hash: Optional[str] = typer.Option(None)):
+    """Register local QAC source metadata only; no raw copy, records, or ingestion."""
+    with session_scope() as s:
+        result = register_local_qac(SqlRegistrationRepository(s), path, original_filename=original_filename, expected_parser_configuration_hash=expected_parser_configuration_hash)
+        s.commit()
+    echo(result | {"expected_parser_configuration_hash": EXPECTED_CONFIGURATION_HASH.digest})
+
+
+@annotation_source_app.command("ingest")
+def annotation_source_ingest(source_id: int):
+    """Persist a metadata-registered QAC source without any Tanzil alignment."""
+    with session_scope() as s:
+        echo(ingest_qac_source(s, source_id))
+
+@annotation_source_app.command("align")
+def annotation_source_align(source_id: int):
+    """Create or reuse bounded QAC-to-Tanzil alignment evidence."""
+    with session_scope() as s: echo(align_qac_source(s, source_id))
+
 @annotation_source_app.command("inspect")
 def annotation_source_inspect(path: Path, format: str = typer.Option(..., "--format")):
     echo(inspect_annotation_source(path, format))
@@ -186,9 +265,88 @@ def annotation_source_register(path: Path, name: str = typer.Option(...), versio
 def annotation_source_list():
     with session_scope() as s: echo(list_annotation_sources(s))
 
+def _catalog_text(entry: dict) -> None:
+    for key, value in entry.items():
+        if key == "lifecycle":
+            typer.echo(f"LIFECYCLE={value}")
+        elif isinstance(value, list):
+            typer.echo(f"{key}={json.dumps(value, ensure_ascii=False, separators=(',', ':'))}")
+        else:
+            typer.echo(f"{key}={value}")
+
+
+@annotation_source_app.command("catalog")
+def annotation_source_catalog(format: str = typer.Option("text", "--format")):
+    """List static source catalog entries; this never consults source-release rows."""
+    if format not in {"text", "json"}:
+        raise typer.BadParameter("format must be text or json")
+    entries = [entry.to_dict() for entry in list_catalog_sources()]
+    if format == "json":
+        echo(entries)
+    else:
+        for index, entry in enumerate(entries):
+            if index:
+                typer.echo()
+            _catalog_text(entry)
+
+
 @annotation_source_app.command("show")
-def annotation_source_show(source_id: int):
-    with session_scope() as s: echo(show_annotation_source(s, source_id))
+def annotation_source_show(source: str, format: str = typer.Option("text", "--format")):
+    """Show a static catalog source by identifier; numeric release IDs retain legacy output."""
+    if format not in {"text", "json"}:
+        raise typer.BadParameter("format must be text or json")
+    if source.isdecimal():
+        with session_scope() as s:
+            echo(show_annotation_source(s, int(source)))
+        return
+    try:
+        entry = get_catalog_source(source).to_dict()
+    except KeyError as exc:
+        typer.echo(json.dumps({"code": "catalog_source_not_found", "source_identifier": source}, ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+    if format == "json":
+        echo(entry)
+    else:
+        _catalog_text(entry)
+
+
+@annotation_source_app.command("lifecycle-guard")
+def annotation_source_lifecycle_guard(source: str, operation: str = typer.Option(..., "--operation")):
+    """Run a read-only future-operation lifecycle guard; it never activates or ingests."""
+    if operation not in {"activation", "ingestion"}:
+        raise typer.BadParameter("operation must be activation or ingestion")
+    try:
+        entry = get_catalog_source(source)
+        if operation == "activation":
+            guard_source_activation(entry)
+        else:
+            guard_source_ingestion(entry)
+    except SourceLifecycleError as exc:
+        typer.echo(json.dumps(exc.to_dict(), ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+    except KeyError as exc:
+        typer.echo(json.dumps({"code": "catalog_source_not_found", "source_identifier": source}, ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+    echo({"source_identifier": entry.source_identifier, "lifecycle": entry.lifecycle.value, "operation": operation, "permitted": True})
+
+
+@annotation_source_app.command("capabilities")
+def annotation_source_capabilities(source_release_id: int, format: str = typer.Option("text", "--format")):
+    """Display the immutable adapter-derived capability descriptor; this never writes."""
+    if format not in {"text", "json"}:
+        raise typer.BadParameter("format must be text or json")
+    try:
+        with session_scope() as s:
+            descriptor = source_descriptor(s, source_release_id, production_annotation_adapter_registry())
+        data = descriptor.to_dict()
+        if format == "json":
+            echo(data)
+        else:
+            for key, value in data.items():
+                typer.echo(f"{key}={','.join(value) if isinstance(value, list) else value}")
+    except AnnotationFrameworkError as exc:
+        typer.echo(json.dumps(exc.to_dict(), ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
 
 @annotation_source_app.command("validate")
 def annotation_source_validate(source_id: int):
@@ -196,6 +354,61 @@ def annotation_source_validate(source_id: int):
         result = validate_annotation_source(s, source_id)
     echo(result)
     if not result.get("ok"): raise typer.Exit(1)
+
+def _morphology_result(result, format: str) -> None:
+    data = result.to_dict()
+    if format == "json":
+        echo(data)
+    else:
+        for item in data["results"]:
+            typer.echo(f"{item['locator']} {item['tag']} {item['form']} {item['raw_features']}")
+
+
+@morphology_app.command("find")
+def morphology_find(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), token: Optional[int] = typer.Option(None, "--token"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("human", "--format")):
+    if format not in {"human", "json"}:
+        raise typer.BadParameter("format must be human or json")
+    try:
+        query = MorphologyQuery(source_release_id, root, lemma, tag, feature, surah, ayah, token, None, alignment_method, limit, offset)
+        with session_scope() as s:
+            _morphology_result(MorphologyQueryService(SqlMorphologyRepository(s)).find(query), format)
+    except AnnotationFrameworkError as exc:
+        typer.echo(json.dumps(exc.to_dict(), ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _locator(value: str, parts: int) -> tuple[int, ...]:
+    try:
+        values = tuple(int(part) for part in value.split(":"))
+    except ValueError as exc:
+        raise typer.BadParameter("malformed locator") from exc
+    if len(values) != parts or any(part < 1 for part in values):
+        raise typer.BadParameter("malformed locator")
+    return values
+
+
+@morphology_app.command("show-ayah")
+def morphology_show_ayah(locator: str):
+    surah, ayah = _locator(locator, 2)
+    with session_scope() as s:
+        _morphology_result(MorphologyQueryService(SqlMorphologyRepository(s)).show_ayah(surah, ayah), "human")
+
+
+@morphology_app.command("show-token")
+def morphology_show_token(locator: str):
+    surah, ayah, token = _locator(locator, 3)
+    with session_scope() as s:
+        _morphology_result(MorphologyQueryService(SqlMorphologyRepository(s)).show_token(surah, ayah, token), "human")
+
+
+@morphology_app.command("show-locator")
+def morphology_show_locator(locator: str):
+    surah, ayah, token, segment = _locator(locator, 4)
+    with session_scope() as s:
+        _morphology_result(MorphologyQueryService(SqlMorphologyRepository(s)).show_locator(surah, ayah, token, segment), "human")
+
 
 @morphology_app.command("ingest")
 def morphology_ingest(annotation_source_id: int, quran_source: int = typer.Option(..., "--quran-source"), alignment_config: str = typer.Option(..., "--alignment-config"), allow_dirty: bool = typer.Option(False, "--allow-dirty")):
@@ -232,7 +445,83 @@ def morphology_alignment_unresolved(annotation_source: int = typer.Option(..., "
 def morphology_conflicts(annotation_source: int = typer.Option(..., "--annotation-source"), dimension: str = typer.Option(..., "--dimension")):
     with session_scope() as s: echo(morph_conflicts(s, annotation_source, dimension))
 
-@morphology_app.command("stats")
+def _analytics_filter(source_release_id: Optional[int], surah: Optional[int], ayah: Optional[int], root: Optional[str], lemma: Optional[str], tag: Optional[str], feature: Optional[str], alignment_method: Optional[str]) -> MorphologyAnalyticsFilter:
+    return MorphologyAnalyticsFilter(source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method)
+
+
+def _analytics_result(result, format: str, dimension: str) -> None:
+    if format not in {"text", "json"}:
+        raise typer.BadParameter("format must be text or json")
+    if hasattr(result, "to_dict"):
+        data = result.to_dict()
+    else:
+        data = {"dimension": dimension, "results": [item.to_dict() for item in result]}
+    if format == "json":
+        echo(data)
+    elif "results" in data:
+        for row in data["results"]:
+            typer.echo(" ".join(f"{key}={value}" for key, value in row.items()))
+    else:
+        for key, value in data.items():
+            typer.echo(f"{key}={value}")
+
+
+def _run_analytics(method: str, source_release_id: Optional[int], surah: Optional[int], ayah: Optional[int], root: Optional[str], lemma: Optional[str], tag: Optional[str], feature: Optional[str], alignment_method: Optional[str], limit: int, offset: int, format: str) -> None:
+    try:
+        filters = _analytics_filter(source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method)
+        with session_scope() as s:
+            service = MorphologyAnalyticsService(s)
+            service._page(limit, offset)
+            result = getattr(service, method)(filters) if method == "summary" else getattr(service, method)(filters, limit, offset)
+        _analytics_result(result, format, method)
+    except AnnotationFrameworkError as exc:
+        typer.echo(json.dumps(exc.to_dict(), ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@morph_stats_app.command("summary")
+def morphology_stats_summary(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("summary", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("roots")
+def morphology_stats_roots(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("root_frequency", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("lemmas")
+def morphology_stats_lemmas(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("lemma_frequency", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("tags")
+def morphology_stats_tags(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("tag_frequency", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("features")
+def morphology_stats_features(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("feature_frequency", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("surahs")
+def morphology_stats_surahs(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("surah_statistics", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("ayahs")
+def morphology_stats_ayahs(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("ayah_statistics", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morph_stats_app.command("segments")
+def morphology_stats_segments(source_release_id: Optional[int] = typer.Option(None, "--source-release-id"), surah: Optional[int] = typer.Option(None, "--surah"), ayah: Optional[int] = typer.Option(None, "--ayah"), root: Optional[str] = typer.Option(None, "--root"), lemma: Optional[str] = typer.Option(None, "--lemma"), tag: Optional[str] = typer.Option(None, "--tag"), feature: Optional[str] = typer.Option(None, "--feature"), alignment_method: Optional[str] = typer.Option(None, "--alignment-method"), limit: int = typer.Option(50, "--limit"), offset: int = typer.Option(0, "--offset"), format: str = typer.Option("text", "--format")):
+    _run_analytics("segment_distribution", source_release_id, surah, ayah, root, lemma, tag, feature, alignment_method, limit, offset, format)
+
+
+@morphology_app.command("ingestion-stats")
 def morphology_stats(ingestion_run_id: int):
     with session_scope() as s: echo(morph_stats(s, ingestion_run_id))
 
@@ -248,3 +537,102 @@ def morphology_verify_export(path: Path):
     if not result.get("ok"): raise typer.Exit(1)
 
 if __name__ == "__main__": app()
+
+
+def _phase5b_input(query: Optional[str], query_file: Optional[Path], input_format: Optional[str]) -> dict:
+    if (query is None) == (query_file is None):
+        raise AggregationError("ambiguous_count_semantics", "provide exactly one of --query or --query-file")
+    payload = query_file.read_text(encoding="utf-8") if query_file else query or ""
+    fmt = input_format or ("yaml" if query_file and query_file.suffix in {".yaml", ".yml"} else "json")
+    if fmt == "json": return json.loads(payload)
+    if fmt == "yaml":
+        import yaml
+        return yaml.safe_load(payload)
+    raise AggregationError("ambiguous_count_semantics", "input format must be json or yaml")
+
+def _phase5b_run(factory, operation: str, query: Optional[str], query_file: Optional[Path], input_format: Optional[str], format: str) -> None:
+    try:
+        request = factory(_phase5b_input(query, query_file, input_format))
+        with session_scope() as session: result = getattr(ResearchEngine(session), operation)(request)
+        data = result.to_dict() if hasattr(result, "to_dict") else result
+        if format == "json": typer.echo(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        elif format == "yaml":
+            import yaml
+            typer.echo(yaml.safe_dump(data, allow_unicode=True, sort_keys=True))
+        elif format == "text": typer.echo(f"reproducibility_hash={data.get('reproducibility_hash', '')}")
+        else: raise AggregationError("ambiguous_count_semantics", "format must be text, json, or yaml")
+    except (ResearchQueryError, AggregationError, AnnotationFrameworkError, ValueError) as exc:
+        typer.echo(json.dumps(exc.to_dict() if hasattr(exc, "to_dict") else {"code":"invalid_research_query", "message":str(exc)}, ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+
+@research_app.command("aggregate")
+def research_aggregate(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
+    _phase5b_run(AggregateQuery.from_dict, "aggregate", query, query_file, input_format, format)
+@research_app.command("set")
+def research_set(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
+    _phase5b_run(SetQuery.from_dict, "set", query, query_file, input_format, format)
+@research_app.command("cooccurrence")
+def research_cooccurrence(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
+    _phase5b_run(CooccurrenceQuery.from_dict, "cooccurrence", query, query_file, input_format, format)
+@research_app.command("explain")
+def research_explain(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), operation: str = typer.Option("aggregate", "--operation"), format: str = typer.Option("text", "--format")):
+    factories={"aggregate":AggregateQuery.from_dict,"set":SetQuery.from_dict,"cooccurrence":CooccurrenceQuery.from_dict}
+    if operation not in factories: raise typer.BadParameter("operation must be aggregate, set, or cooccurrence")
+    _phase5b_run(factories[operation], "explain", query, query_file, input_format, format)
+
+# Phase 5C commands are deliberately top-level, read-only certification boundaries.
+
+def _verification_command(format: str, operation):
+    try:
+        with session_scope() as session:
+            data = operation(session)
+        typer.echo(render_verification(data, format))
+        if data.get("status") in {"FAIL", "NOT_CERTIFIED"}:
+            raise typer.Exit(1)
+    except (VerificationError, ResearchQueryError, AggregationError, AnnotationFrameworkError, ValueError) as exc:
+        typer.echo(json.dumps(exc.to_dict() if hasattr(exc, "to_dict") else {"code": "verification_error", "message": str(exc)}, ensure_ascii=False), err=True)
+        raise typer.Exit(2) from exc
+
+
+@app.command("verify")
+def verify(format: str = typer.Option("text", "--format"), update_goldens: bool = typer.Option(False, "--update-goldens")):
+    """Run deterministic golden and replay checks without persisting any result."""
+    def operation(session):
+        before = database_counts(session)
+        contract = golden_contract()
+        locks = compatibility_locks()
+        golden = verify_goldens(session, update=update_goldens)
+        replay = replay_goldens(session)
+        after = database_counts(session)
+        invariant = before == after
+        passed = contract["passed"] and locks["failed"] == 0 and golden["failed"] == 0 and replay["failed"] == 0 and invariant
+        return {"status": "PASS" if passed else "FAIL", "golden_contract": contract, "compatibility_locks": locks,
+                "golden": golden, "replay": replay, "counts_before": before, "counts_after": after,
+                "COUNTS_INVARIANT": invariant}
+    _verification_command(format, operation)
+
+
+@app.command("benchmark")
+def benchmark_command(format: str = typer.Option("text", "--format")):
+    """Run volatile read-only benchmark observations; no threshold or persistence exists."""
+    _verification_command(format, verification_benchmark)
+
+
+@app.command("release-manifest")
+def release_manifest_command(format: str = typer.Option("text", "--format")):
+    _verification_command(format, release_manifest)
+
+
+@app.command("research-certificate")
+def research_certificate_command(format: str = typer.Option("text", "--format")):
+    def operation(session):
+        before = database_counts(session)
+        contract = golden_contract()
+        locks = compatibility_locks()
+        golden = verify_goldens(session)
+        replay = replay_goldens(session)
+        after = database_counts(session)
+        invariant = before == after
+        status = "PASS" if contract["passed"] and locks["failed"] == golden["failed"] == replay["failed"] == 0 and invariant else "NOT_CERTIFIED"
+        return research_certificate(session, {"passed": golden["passed"] + replay["passed"] + locks["passed"], "failed": golden["failed"] + replay["failed"] + locks["failed"], "warnings": 0, "status": status, "COUNTS_INVARIANT": invariant, "GOLDEN_CONTRACT": contract["passed"], "counts_before": before, "counts_after": after})
+    _verification_command(format, operation)

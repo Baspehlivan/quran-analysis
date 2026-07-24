@@ -1,0 +1,4 @@
+schema: research-aggregation-v1
+unit: MORPHOLOGICAL_SEGMENT
+group_by: [root]
+query: {where: {dimension: root, operator: eq, value: ktb}}

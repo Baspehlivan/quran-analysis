@@ -4,7 +4,7 @@ This document covers the generic, provenance-preserving morphology annotation la
 
 Phase 3A stores source-native annotation records exactly, parses derived payloads separately, aligns to Tanzil tokens with explicit evidence, and preserves uncertainty, ambiguity, partial matches, unaligned rows, malformed rows, unknown rows, and conflicts. It does not implement morphology frequencies, root/lemma counts, semantic search, embeddings, abjad, theological/numerological claims, expected frequencies, verse-specific logic, or Phase 3B search/counting.
 
-Synthetic fixture format `synthetic-qac-tsv-v1` is QAC-concept-inspired for tests only and is not an official QAC importer. External annotation sources are annotation only. Real QAC v0.4 is not downloaded, committed, or ingested because official downloadable QAC/GPLv3 text conflicts with FAQ language about non-commercial / purely research use; license and redistribution must be clarified first.
+Synthetic fixture format `synthetic-qac-tsv-v1` is QAC-concept-inspired for tests only and is not an official QAC importer. External annotation sources are annotation only. The implemented QAC v0.4 adapter accepts only a user-provided local artifact; it does not download or commit QAC data. Artifact-level license, terms, and provenance must be captured before registration.
 
 Source-native fields and derived fields are distinct. Parser, transliteration, feature mapping, alignment configurations are frozen and content-hashed. Hash algorithms are `morphology-record-hash-v1`, `morphology-analysis-hash-v1`, `morphology-segment-hash-v1`, `morphology-alignment-hash-v1`, and `morphology-ingestion-hash-v1`, over canonical JSON excluding DB row ids, output paths, timestamps, and terminal formatting.
 

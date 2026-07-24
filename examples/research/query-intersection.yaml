@@ -1,0 +1,9 @@
+schema: research-set-v1
+left:
+  schema: research-query-v1
+  where: {dimension: root, operator: eq, value: ktb}
+right:
+  schema: research-query-v1
+  where: {dimension: pos, operator: eq, value: N}
+identity: CANONICAL_TOKEN
+operation: INTERSECTION

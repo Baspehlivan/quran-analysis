@@ -22,8 +22,11 @@ def test_synthetic_fixture_inspect_preserves_records():
     assert info["counts"]["malformed"] >= 1
 
 
-def test_register_validate_ingest_export_and_immutability(tmp_path):
+def test_register_validate_ingest_export_and_immutability(tmp_path, monkeypatch):
     with session() as s:
+        # The production helpers commit completed immutable provenance rows.  Keep this
+        # test's owned rows in the session transaction so close() rolls them back.
+        monkeypatch.setattr(s, "commit", s.flush)
         reg = register_annotation_source(s, FIXTURE, name=f"synthetic-test-{uuid4()}", version="v1", fmt="synthetic-qac-tsv-v1", publisher="synthetic", license="synthetic-fixture")
         sid = reg["annotation_source_release_id"]
         assert validate_annotation_source(s, sid)["byte_identical"] is True
@@ -33,14 +36,10 @@ def test_register_validate_ingest_export_and_immutability(tmp_path):
         assert st["malformed"] >= 1 and st["unknown"] >= 1
         assert unresolved(s, sid, "ambiguous")
         assert unresolved(s, sid, "unaligned")
-        with pytest.raises(Exception):
+        with pytest.raises(Exception), s.begin_nested():
             s.execute(text("update annotation_source_record set raw_record_content='tamper' where annotation_source_release_id=:sid"), {"sid": sid})
-            s.commit()
-        s.rollback()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception), s.begin_nested():
             s.execute(text("update morphology_ingestion_run set status='failed' where id=:id"), {"id": run_id})
-            s.commit()
-        s.rollback()
         out = tmp_path / "alignments.json"
         manifest = export_entity(s, run_id, "alignments", "json", out)
         assert manifest["row_count"] == st["alignments"]

@@ -1,0 +1,6 @@
+schema: research-aggregation-v1
+query:
+  schema: research-query-v1
+  where: {dimension: root, operator: eq, value: ktb}
+unit: CANONICAL_AYAH
+metric: COUNT_DISTINCT

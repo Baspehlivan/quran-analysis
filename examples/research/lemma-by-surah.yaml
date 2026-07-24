@@ -1,0 +1,7 @@
+schema: research-aggregation-v1
+query:
+  schema: research-query-v1
+  where: {dimension: lemma, operator: eq, value: kitab}
+unit: MORPHOLOGICAL_SEGMENT
+metric: COUNT
+group_by: [surah, lemma]

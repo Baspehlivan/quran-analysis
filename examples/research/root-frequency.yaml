@@ -1,0 +1,7 @@
+schema: research-aggregation-v1
+query:
+  schema: research-query-v1
+  where: {dimension: root, operator: eq, value: ktb}
+unit: MORPHOLOGICAL_SEGMENT
+metric: FREQUENCY
+group_by: [root]

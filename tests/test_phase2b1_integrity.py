@@ -3,23 +3,38 @@ import json
 import subprocess
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
 from quran_analysis import __version__
 from quran_analysis.analysis import exact_token_search, parse_export_rows, verify_export_file, write_export
 from quran_analysis.db.session import get_session_local
-from quran_analysis.models.tables import AnalysisRun, EnvironmentSnapshot, NormalizationProfile, QueryScopeDefinition, SourceRelease
+from quran_analysis.models.tables import AnalysisEvidence, AnalysisRun, EnvironmentSnapshot, NormalizationProfile, QueryScopeDefinition, SourceRelease
 from quran_analysis.normalization.profiles import get_profile
 from quran_analysis.provenance import canonical_hash, evidence_hash, ngram_sequence_hash, query_hash_payload
 
 
-def test_application_version_is_phase2b_patch():
-    assert __version__ == "0.2.1-phase2b"
+@pytest.fixture(autouse=True)
+def analysis_provenance_rows_are_rolled_back():
+    def counts():
+        with get_session_local()() as session:
+            return (
+                session.scalar(select(func.count()).select_from(AnalysisRun)),
+                session.scalar(select(func.count()).select_from(AnalysisEvidence)),
+            )
+
+    before = counts()
+    yield
+    assert counts() == before
 
 
-def test_query_hash_semantics_not_output_window():
+def test_application_version_is_release_version():
+    assert __version__ == "1.0.0"
+
+
+def test_query_hash_semantics_not_output_window(monkeypatch):
     session = get_session_local()()
+    monkeypatch.setattr(session, "commit", session.flush)
     try:
         run_a, _ = exact_token_search(session, "بِسْمِ", allow_dirty=True)
         run_b, _ = exact_token_search(session, "الله", allow_dirty=True)
@@ -60,8 +75,9 @@ def test_adversarial_ngram_canonical_hashing():
     assert a == ngram_sequence_hash(["a b", "c"], representation="raw-token", normalization_profile_sha256=None, n=2)
 
 
-def test_export_csv_json_jsonl_recompute_and_tamper_rejection(tmp_path):
+def test_export_csv_json_jsonl_recompute_and_tamper_rejection(tmp_path, monkeypatch):
     session = get_session_local()()
+    monkeypatch.setattr(session, "commit", session.flush)
     try:
         run, results = exact_token_search(session, "بِسْمِ", allow_dirty=True)
         assert results
@@ -104,6 +120,7 @@ def test_default_dirty_refusal_and_allow_dirty_provenance(monkeypatch):
     import quran_analysis.provenance as provenance_mod
 
     session = get_session_local()()
+    monkeypatch.setattr(session, "commit", session.flush)
     try:
         monkeypatch.setattr(analysis_mod, "git_dirty", lambda cwd=None: True)
         with pytest.raises(ValueError, match="dirty git tree"):
@@ -118,14 +135,14 @@ def test_default_dirty_refusal_and_allow_dirty_provenance(monkeypatch):
 
 
 def _rejects(session, sql):
-    with pytest.raises(DBAPIError):
+    with pytest.raises(DBAPIError), session.begin_nested():
         session.execute(text(sql))
-        session.commit()
-    session.rollback()
+        session.flush()
 
 
-def test_direct_sql_immutability_rejections():
+def test_direct_sql_immutability_rejections(monkeypatch):
     session = get_session_local()()
+    monkeypatch.setattr(session, "commit", session.flush)
     try:
         run, _ = exact_token_search(session, "بِسْمِ", allow_dirty=True)
         profile = session.scalars(select(NormalizationProfile).order_by(NormalizationProfile.id)).first()

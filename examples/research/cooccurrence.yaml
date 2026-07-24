@@ -1,0 +1,6 @@
+schema: research-cooccurrence-v1
+identity: CANONICAL_TOKEN
+scope: SAME_AYAH
+pair_policy: UNIQUE_TOKEN_PAIRS
+left: {where: {dimension: root, operator: eq, value: ktb}}
+right: {where: {dimension: pos, operator: eq, value: N}}

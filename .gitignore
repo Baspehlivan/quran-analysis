@@ -15,3 +15,14 @@ postgres-data/
 pgdata/
 data/analysis_runs/*
 .DS_Store
+
+# Locally acquired annotation datasets and their derived local artifacts stay outside Git.
+# This does not untrack committed Tanzil source/manifest files; tracked files remain tracked.
+data/incoming/
+data/annotation_incoming/
+data/annotation_raw/
+data/annotation_manifests/
+data/exports/
+
+# Local Slate tool configuration.
+slate.json
