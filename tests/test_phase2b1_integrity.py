@@ -29,7 +29,7 @@ def analysis_provenance_rows_are_rolled_back():
 
 
 def test_application_version_is_release_version():
-    assert __version__ == "1.0.0"
+    assert __version__ == "1.1.0"
 
 
 def test_query_hash_semantics_not_output_window(monkeypatch):

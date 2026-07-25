@@ -1,0 +1,6 @@
+schema: research-set-v1
+identity: CANONICAL_AYAH
+operation: DIFFERENCE
+left: {where: {dimension: pos, operator: eq, value: V}}
+right: {where: {dimension: lemma, operator: eq, value: kitab}}
+limit: 100

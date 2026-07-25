@@ -1,0 +1,30 @@
+name: Research question
+description: Request help framing a reproducible, source-native analysis question.
+title: "[Research]: "
+labels: [research]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Proposed source-native fields, identity, and bounded query
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Source, version, alignment, and reproducibility context
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I understand this project does not make theological, historical, or authorship claims.
+          required: true

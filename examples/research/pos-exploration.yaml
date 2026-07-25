@@ -1,0 +1,7 @@
+schema: research-aggregation-v1
+query:
+  where: {dimension: pos, operator: eq, value: V}
+unit: MORPHOLOGICAL_SEGMENT
+metric: FREQUENCY
+group_by: [pos]
+limit: 50

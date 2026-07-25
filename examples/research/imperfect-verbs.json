@@ -1,0 +1,19 @@
+{
+  "schema": "research-query-v1",
+  "where": {
+    "and": [
+      {
+        "dimension": "pos",
+        "operator": "eq",
+        "value": "V"
+      },
+      {
+        "dimension": "feature",
+        "operator": "eq",
+        "value": "IMPF"
+      }
+    ]
+  },
+  "limit": 50,
+  "offset": 0
+}

@@ -1,0 +1,7 @@
+schema: research-aggregation-v1
+query:
+  where: {dimension: lemma, operator: eq, value: kitab}
+unit: MORPHOLOGICAL_SEGMENT
+metric: FREQUENCY
+group_by: [lemma]
+limit: 50

@@ -32,6 +32,7 @@ from quran_analysis.morphology.query import MorphologyQuery, MorphologyQueryServ
 from quran_analysis.morphology.core import (conflicts as morph_conflicts, export_entity as morph_export_entity, get_table_row as morph_get_table_row, ingest_morphology, inspect_annotation_source, list_annotation_sources, register_annotation_source, show_annotation_source, show_token as morph_show_token, stats as morph_stats, unresolved as morph_unresolved, validate_annotation_source, validate_ingestion, verify_export as morph_verify_export)
 from quran_analysis.normalization.profiles import PROFILES, get_profile, normalize_token
 from quran_analysis.provenance import environment
+from quran_analysis.presentation import emit_research
 from quran_analysis.research import (
     AggregateQuery, AggregationError, CooccurrenceQuery, ResearchEngine, ResearchQueryError, SetQuery, load_query,
 )
@@ -66,29 +67,20 @@ def session_scope(): return get_session_local()()
 def _state(source: Path): return ingest_memory(source)
 
 @research_app.command("query")
-def research_query(query: Optional[str] = typer.Option(None, "--query"), file: Optional[Path] = typer.Option(None, "--file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
+def research_query(query: Optional[str] = typer.Option(None, "--query"), file: Optional[Path] = typer.Option(None, "--file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format"), output: Optional[Path] = typer.Option(None, "--output")):
     """Execute a bounded immutable research query from inline JSON/YAML or a query file."""
     if (query is None) == (file is None):
         raise typer.BadParameter("provide exactly one of --query or --file")
-    if format not in {"text", "json", "yaml"}:
-        raise typer.BadParameter("format must be text, json, or yaml")
+    if format not in {"text", "json", "yaml", "csv", "jsonl", "markdown"}:
+        raise typer.BadParameter("format must be text, json, yaml, csv, jsonl, or markdown")
     try:
+        if file is not None and not file.is_file():
+            raise ResearchQueryError(f"query file not found: {file}")
         parsed = load_query(file if file is not None else query or "", input_format)
         with session_scope() as s:
             result = ResearchEngine(s).execute(parsed)
-        if format == "json":
-            typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, default=str))
-        elif format == "yaml":
-            import yaml
-            typer.echo(yaml.safe_dump(result.to_dict(), allow_unicode=True, sort_keys=True))
-        else:
-            data = result.to_dict()
-            typer.echo(f"reproducibility_hash={data['metadata']['reproducibility_hash']}")
-            typer.echo(f"returned_rows={data['summary']['returned_rows']} total_matching_rows={data['summary']['total_matching_rows']}")
-            for match in result.matches:
-                coordinate = match.coordinate
-                typer.echo(f"{coordinate['surah']}:{coordinate['ayah']}:{coordinate['token']}:{match.segment} root={match.root} lemma={match.lemma} pos={match.pos}")
-    except (ResearchQueryError, AnnotationFrameworkError) as exc:
+        typer.echo(emit_research(result.to_dict(), format, output), nl=False)
+    except (ResearchQueryError, AnnotationFrameworkError, OSError, ValueError) as exc:
         payload = exc.to_dict() if hasattr(exc, "to_dict") else {"code": "invalid_research_query", "message": str(exc)}
         typer.echo(json.dumps(payload, ensure_ascii=False), err=True)
         raise typer.Exit(2) from exc
@@ -550,30 +542,25 @@ def _phase5b_input(query: Optional[str], query_file: Optional[Path], input_forma
         return yaml.safe_load(payload)
     raise AggregationError("ambiguous_count_semantics", "input format must be json or yaml")
 
-def _phase5b_run(factory, operation: str, query: Optional[str], query_file: Optional[Path], input_format: Optional[str], format: str) -> None:
+def _phase5b_run(factory, operation: str, query: Optional[str], query_file: Optional[Path], input_format: Optional[str], format: str, output: Optional[Path] = None) -> None:
     try:
         request = factory(_phase5b_input(query, query_file, input_format))
         with session_scope() as session: result = getattr(ResearchEngine(session), operation)(request)
         data = result.to_dict() if hasattr(result, "to_dict") else result
-        if format == "json": typer.echo(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        elif format == "yaml":
-            import yaml
-            typer.echo(yaml.safe_dump(data, allow_unicode=True, sort_keys=True))
-        elif format == "text": typer.echo(f"reproducibility_hash={data.get('reproducibility_hash', '')}")
-        else: raise AggregationError("ambiguous_count_semantics", "format must be text, json, or yaml")
-    except (ResearchQueryError, AggregationError, AnnotationFrameworkError, ValueError) as exc:
+        typer.echo(emit_research(data, format, output), nl=False)
+    except (ResearchQueryError, AggregationError, AnnotationFrameworkError, OSError, ValueError) as exc:
         typer.echo(json.dumps(exc.to_dict() if hasattr(exc, "to_dict") else {"code":"invalid_research_query", "message":str(exc)}, ensure_ascii=False), err=True)
         raise typer.Exit(2) from exc
 
 @research_app.command("aggregate")
-def research_aggregate(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
-    _phase5b_run(AggregateQuery.from_dict, "aggregate", query, query_file, input_format, format)
+def research_aggregate(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format"), output: Optional[Path] = typer.Option(None, "--output")):
+    _phase5b_run(AggregateQuery.from_dict, "aggregate", query, query_file, input_format, format, output)
 @research_app.command("set")
-def research_set(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
-    _phase5b_run(SetQuery.from_dict, "set", query, query_file, input_format, format)
+def research_set(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format"), output: Optional[Path] = typer.Option(None, "--output")):
+    _phase5b_run(SetQuery.from_dict, "set", query, query_file, input_format, format, output)
 @research_app.command("cooccurrence")
-def research_cooccurrence(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format")):
-    _phase5b_run(CooccurrenceQuery.from_dict, "cooccurrence", query, query_file, input_format, format)
+def research_cooccurrence(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), format: str = typer.Option("text", "--format"), output: Optional[Path] = typer.Option(None, "--output")):
+    _phase5b_run(CooccurrenceQuery.from_dict, "cooccurrence", query, query_file, input_format, format, output)
 @research_app.command("explain")
 def research_explain(query: Optional[str] = typer.Option(None, "--query"), query_file: Optional[Path] = typer.Option(None, "--query-file"), input_format: Optional[str] = typer.Option(None, "--input-format"), operation: str = typer.Option("aggregate", "--operation"), format: str = typer.Option("text", "--format")):
     factories={"aggregate":AggregateQuery.from_dict,"set":SetQuery.from_dict,"cooccurrence":CooccurrenceQuery.from_dict}

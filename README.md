@@ -1,6 +1,6 @@
 # Quran Analysis
 
-`quran-analysis` 1.0.0 is neutral, auditable tooling for ingesting canonical Quran text and querying source-native morphology evidence. Raw registered bytes are immutable; derived data, alignment evidence, and research results preserve provenance.
+`quran-analysis` 1.1.0 is neutral, auditable tooling for ingesting canonical Quran text and querying source-native morphology evidence. Raw registered bytes are immutable; derived data, alignment evidence, and research results preserve provenance.
 
 It makes no theological, numerological, historical, or authorship claims. Tanzil is the authoritative Quran text source in this repository. QAC and any future morphology source are external annotations and do not replace it.
 
@@ -104,10 +104,23 @@ quran research-certificate --format json
 
 `quran verify` checks the versioned eleven-case golden contract, compatibility locks, deterministic replay, and equality of the fixed eleven-table before/after count vector. `release-manifest` and `research-certificate` render canonical, secret-free observations to standard output. Golden snapshots are updated only by the deliberately guarded command documented in [docs/verification.md](docs/verification.md); normal verification never updates them.
 
+## License and external sources
+
+The repository's code and documentation are licensed under the [Apache License 2.0](LICENSE) (`Apache-2.0`). This license applies only to this repository's original code and documentation. It does **not** relicense Tanzil, QAC, QuranMorph, or any other external corpus or annotation artifact: their respective licenses, attribution requirements, and terms remain controlling. Obtain and use external artifacts only under their own applicable terms.
+
 ## Documentation
 
+- [Research recipes](docs/research-recipes.md)
+- [Python API](docs/python-api.md)
+- [Research export formats](docs/export-format.md)
+- [Architecture diagrams](docs/architecture/index.md)
+- [Optional notebooks](docs/notebooks.md)
+- [Citation](docs/citation.md)
 - [Architecture](docs/architecture.md)
 - [Source policy](docs/source-policy.md)
 - [QAC local acquisition](docs/qac-local-acquisition.md)
 - [Verification and certification](docs/verification.md)
 - [Release notes](RELEASE_NOTES.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [License](LICENSE)

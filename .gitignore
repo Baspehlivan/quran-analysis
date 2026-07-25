@@ -26,3 +26,19 @@ data/exports/
 
 # Local Slate tool configuration.
 slate.json
+
+# Local publication/development artifacts; keep tracked examples and source files explicit.
+.env.*
+!.env.example
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+*.sqlite3
+*.dump
+*.sql.gz
+*.pem
+*.key
+*.p12
+*.pfx
+*.tmp
+*.bak

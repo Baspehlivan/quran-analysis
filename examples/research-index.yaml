@@ -1,0 +1,24 @@
+# Each bounded request is input only; commands write results to stdout unless --output is supplied.
+examples:
+  - file: exact-token.json
+    command: quran research query --file examples/research/exact-token.json --format json
+  - file: lemma-frequency.yaml
+    command: quran research aggregate --query-file examples/research/lemma-frequency.yaml --format json
+  - file: root-frequency.yaml
+    command: quran research aggregate --query-file examples/research/root-frequency.yaml --format csv
+  - file: pos-exploration.yaml
+    command: quran research aggregate --query-file examples/research/pos-exploration.yaml --format markdown
+  - file: imperfect-verbs.json
+    command: quran research query --file examples/research/imperfect-verbs.json --format jsonl
+  - file: aggregate-surah.yaml
+    command: quran research aggregate --query-file examples/research/aggregate-surah.yaml --format yaml
+  - file: same-ayah-cooccurrence.yaml
+    command: quran research cooccurrence --query-file examples/research/same-ayah-cooccurrence.yaml --format json
+  - file: set-intersection.yaml
+    command: quran research set --query-file examples/research/set-intersection.yaml --format json
+  - file: set-union.yaml
+    command: quran research set --query-file examples/research/set-union.yaml --format json
+  - file: set-difference.yaml
+    command: quran research set --query-file examples/research/set-difference.yaml --format json
+  - file: set-symmetric-difference.yaml
+    command: quran research set --query-file examples/research/set-symmetric-difference.yaml --format json
